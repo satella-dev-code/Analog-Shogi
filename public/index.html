@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f7f7f5">
+  <meta name="description" content="アナログ将棋は、マス目のない盤上を自由に動かす無料のブラウザ将棋ゲーム。駒の移動範囲を見ながら、同じ端末で2人対局を楽しめます。インストール不要。作成者 SateLLA。">
+  <title>アナログ将棋｜マス目のない無料ブラウザ将棋ゲーム</title>
+  <meta name="author" content="SateLLA">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://analog-shogi.pages.dev/">
+  <meta property="og:url" content="https://analog-shogi.pages.dev/">
+  <meta property="og:type" content="website">
+  <meta property="og:locale" content="ja_JP">
+  <meta property="og:site_name" content="アナログ将棋">
+  <meta property="og:title" content="アナログ将棋｜マス目のない無料ブラウザ将棋ゲーム">
+  <meta property="og:description" content="マス目を無くした、どこにでも置ける将棋。インストール不要、同じ端末で2人で遊べる無料ブラウザゲーム。">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="アナログ将棋｜マス目のない将棋">
+  <meta name="twitter:description" content="駒を自由に動かす、無料のブラウザ将棋ゲーム。同じ端末で2人対局。">
+  <script type="application/ld+json">
+  {"@context":"https://schema.org","@type":"WebApplication","url":"https://analog-shogi.pages.dev/","name":"アナログ将棋","alternateName":"Analog Shogi","description":"マス目のない盤上で駒を自由に動かす、2人用の無料ブラウザ将棋ゲーム。","applicationCategory":"GameApplication","operatingSystem":"Web browser","inLanguage":["ja","en"],"isAccessibleForFree":true,"offers":{"@type":"Offer","price":"0","priceCurrency":"JPY"},"author":{"@type":"Person","name":"SateLLA"}}
+  </script>
+  <link rel="icon" href="./favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./styles.css">
+  <script type="module" src="./app.js"></script>
+</head>
+<body>
+  <main class="app-shell">
+    <header class="app-header">
+      <div class="brand-heading"><h1>アナログ将棋</h1><p class="concept-line">マス目を無くした、どこにでも置ける将棋</p></div>
+      <div class="header-actions"><button id="fullscreen-toggle" class="text-button icon-button" aria-label="全画面表示" title="全画面表示" aria-pressed="false"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path id="fullscreen-icon" d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/></svg></button><button id="rules-open" class="text-button">ルール</button><button id="language-toggle" class="text-button" aria-label="Switch to English">EN</button></div>
+    </header>
+    <div class="display-toolbar">
+      <div class="range-controls" role="group" aria-label="移動範囲の表示">
+        <span class="control-label">範囲</span>
+        <div class="segmented-controls"><button id="own-ranges" class="text-button" aria-label="自分の範囲" aria-pressed="false">自分</button><button id="opponent-ranges" class="text-button" aria-label="相手の範囲" aria-pressed="false">相手</button></div>
+      </div>
+      <div class="range-controls" role="group" aria-label="危険な駒のハイライト">
+        <span class="control-label">危険</span>
+        <div class="segmented-controls"><button id="own-threats" class="text-button" aria-label="自分の危険" aria-pressed="true">自分</button><button id="opponent-threats" class="text-button" aria-label="相手の危険" aria-pressed="true">相手</button></div>
+      </div>
+    </div>
+    <div class="game-actions" aria-label="対局操作">
+      <div class="game-status" aria-live="polite">
+        <h2 id="turn-title">先手の番</h2>
+        <span id="check-banner" class="check-banner" role="alert" hidden>王手</span>
+        <span id="move-number" class="move-number">1手目</span>
+      </div>
+
+      <button id="undo" class="text-button" disabled>待った</button>
+      <button id="flip" class="text-button" aria-label="盤の上下を反転">盤の反転</button>
+      <span class="action-spacer"></span>
+      <button id="resign" class="text-button">投了</button>
+      <button id="reset" class="text-button">新規対局</button>
+    </div>
+    <section class="play-area" aria-label="将棋盤と持ち駒">
+      <div class="hand-tray" id="gote-tray">
+        <strong>後手</strong><div class="hand-pieces" id="gote-hand" aria-label="後手の持ち駒"></div>
+      </div>
+      <div class="board-frame">
+        <svg id="board" viewBox="0 0 900 900" role="group" tabindex="0" aria-label="将棋盤。駒を選んで移動先を指定。矢印キーで移動先を調整、Enterで確定。">
+          <defs>
+            <clipPath id="board-clip"><rect x="26.25" y="26.25" width="847.5" height="847.5"/></clipPath>
+            <linearGradient id="board-wood" x2="1" y2="1"><stop stop-color="#f1dfbd"/><stop offset=".48" stop-color="#ead4ac"/><stop offset="1" stop-color="#dfc497"/></linearGradient>
+            <linearGradient id="piece-wood" x1="0" y1="0" x2=".8" y2="1"><stop stop-color="#fff5d9"/><stop offset=".55" stop-color="#f4dfb5"/><stop offset="1" stop-color="#e5c68e"/></linearGradient>
+          </defs>
+          <rect width="900" height="900" fill="url(#board-wood)"/>
+          <rect x="5" y="5" width="890" height="890" rx="2" fill="none" stroke="#fff5df" stroke-opacity=".7" stroke-width="2"/>
+          <rect x="10" y="10" width="880" height="880" rx="1" fill="none" stroke="#9b7845" stroke-opacity=".38" stroke-width="1"/>
+          <path d="M0 300 H900 M0 600 H900" stroke="#8e734e" stroke-width="1" stroke-dasharray="3 12" opacity="0.35"/>
+          <g id="last-move-layer"></g><g id="all-ranges-layer" clip-path="url(#board-clip)"></g><g id="drop-zones-layer" clip-path="url(#board-clip)" pointer-events="none"></g><g id="range-layer" clip-path="url(#board-clip)"></g><g id="drop-preview-layer" clip-path="url(#board-clip)" pointer-events="none"></g><g id="piece-layer"></g><g id="ghost-layer" pointer-events="none"></g>
+        </svg>
+      </div>
+      <div class="hand-tray" id="sente-tray">
+        <strong>先手</strong><div class="hand-pieces" id="sente-hand" aria-label="先手の持ち駒"></div>
+      </div>
+    </section>
+    <p id="status" class="status-message" role="status" hidden></p>
+    <p id="save-note" class="status-message error" role="status" hidden></p>
+    <details class="history-section"><summary>棋譜 <span id="history-count">0手</span></summary><ol id="history" aria-label="指し手の履歴"></ol></details>
+    <footer class="creator-credit">作成者 SateLLA</footer>
+  </main>
+  <dialog id="promotion-dialog" aria-labelledby="promotion-title"><h2 id="promotion-title">成りますか？</h2><div class="dialog-actions"><button id="promote-no" class="secondary-button">成らない</button><button id="promote-yes" class="primary-button">成る</button></div></dialog>
+  <dialog id="confirm-dialog" aria-labelledby="confirm-title"><h2 id="confirm-title"></h2><p id="confirm-description"></p><div class="dialog-actions"><button id="confirm-no" class="secondary-button">キャンセル</button><button id="confirm-yes" class="primary-button">確定</button></div></dialog>
+  <dialog id="rules-dialog" aria-labelledby="rules-title">
+    <div class="dialog-heading"><h2 id="rules-title">ルール</h2><button class="text-button" id="rules-close" aria-label="ルールを閉じる">閉じる</button></div>
+    <p>2人で交互に操作します。駒を選び、移動先をクリックするかドラッグしてください。移動範囲の色は目安です。選択中の駒の黄土色の領域は駒取りできる範囲です。ほかの駒や王手によって動けない場所もあります。</p>
+    <p>「自分の範囲」は手番側を青、「相手の範囲」は反対側を橙で表示します。両方同時に表示できます。範囲は経路と駒の重なりを反映した目安で、自玉の王手は移動先で判定します。取られそうな駒は、自分が青、相手が橙の縁です。「自分の危険」「相手の危険」でそれぞれ表示を切り替えられます。王手の表示は常に残ります。</p>
+    <h3>移動</h3>
+    <dl class="rules-list">
+      <dt>王</dt><dd>全方向に距離2.0以内。</dd>
+      <dt>歩</dt><dd>前方2.0、幅1.2の長方形。横だけ・後ろへの移動は不可。</dd>
+      <dt>金・銀</dt><dd>通常将棋の移動方向に左右22.5度の扇形。金は距離2.0、銀は2.2以内。</dd>
+      <dt>飛・角・香</dt><dd>通常の射線を中心とする幅1.2の帯。距離は自由。香は前方のみ。</dd>
+      <dt>桂</dt><dd>前に3.2、左右に1.6の2点から半径0.95以内。他の駒を飛び越えます。</dd>
+      <dt>成駒</dt><dd>歩・香・桂・銀は金の動き。馬・龍は元の動きに全方向・距離2.0以内を追加。</dd>
+    </dl>
+    <h3>駒取り・成り</h3>
+    <p>移動先で敵1枚と重なれば取れ、指定した位置に止まります。味方や敵2枚との同時重なりは禁止です。持ち駒は空いた場所へ打てます。全駒共通で、移動の中心線が他の駒に当たらなければ進めます。桂だけは途中の駒を飛び越えられます。持ち駒を重ねて打って取ることはできません。盤の幅は12、駒の直径は0.7です。</p>
+    <p>奥行き4の敵陣に移動前か移動後の中心が入ると成れます。次に動けなくなる歩・香・桂は強制成り。その位置への打ちは禁止です。</p>
+    <h3>勝敗</h3>
+    <p>王に重なる位置へ相手が動ける状態が王手です。自分の王を王手にさらす手は禁止。詰みの自動判定はないため、投了で決着します。二歩・打ち歩詰めは禁止していません。千日手・持将棋の判定はありません。</p>
+    <h3>操作・保存</h3>
+    <p>TabとEnterで駒を選択。盤上で矢印キーで移動先を調整し、Enterで確定します。刻みは0.1、Shiftで0.5、Altで0.01。Escで解除。</p>
+    <p>持ち駒を選ぶと薄緑で打てる場所を表示します。持ち駒・盤上の駒ともに、候補位置に持っている駒を表示します。候補位置の青い範囲は、置いた後の移動範囲の目安です。</p>
+    <p>対局はこのブラウザに自動保存します。待ったは最大100操作まで戻せます。</p>
+  </dialog>
+</body>
+</html>
