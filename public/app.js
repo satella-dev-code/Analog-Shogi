@@ -84,8 +84,8 @@ function renderHands() {
       button.setAttribute('aria-label', localized(`${sideName(side)}の持ち駒 ${NAMES[type]} ${count}枚`, `${sideName(side)} hand: ${pieceName(NAMES[type])}, ${count}`));
       button.setAttribute('aria-pressed', active && selected?.drop === type ? 'true' : 'false');
       const face = svg('svg', { viewBox: '-36 -40 72 80', class: 'hand-piece-face', 'aria-hidden': 'true' });
-      face.append(svg('path', { d: 'M0 -35 L24 -22 L30 29 Q0 35 -30 29 L-24 -22 Z', class: 'hand-piece-body' }));
-      face.append(svg('path', { d: 'M-22 -20 L0 -31 L22 -20 M-25 26 Q0 31 25 26', class: 'hand-piece-bevel' }));
+      face.append(svg('path', { d: 'M0 -36 L23 -23 L29 31 L-29 31 L-23 -23 Z', class: 'hand-piece-body' }));
+      face.append(svg('path', { d: 'M-20 -21 L0 -32 L20 -21 L25 27 L-25 27 Z', class: 'hand-piece-bevel' }));
       face.append(svg('text', { 'text-anchor': 'middle', y: 15, class: 'hand-piece-text' }, NAMES[type]));
       button.append(face);
       const amount = document.createElement('sup');
@@ -126,8 +126,8 @@ function renderPieces() {
     if (chosen) group.append(svg('circle', { r: 43 * PIECE_SCALE, class: 'selection-ring' }));
     const rotation = (p.side === 'gote') !== flipped ? 180 : 0;
     const shape = svg('g', { transform: `rotate(${rotation}) scale(${PIECE_SCALE})`, 'pointer-events': 'none' });
-    shape.append(svg('path', { d: 'M0 -35 L24 -22 L30 29 Q0 35 -30 29 L-24 -22 Z', class: 'piece-body' }));
-    shape.append(svg('path', { d: 'M-22 -20 L0 -31 L22 -20 M-25 26 Q0 31 25 26', class: 'piece-bevel' }));
+    shape.append(svg('path', { d: 'M0 -36 L23 -23 L29 31 L-29 31 L-23 -23 Z', class: 'piece-body' }));
+    shape.append(svg('path', { d: 'M-20 -21 L0 -32 L20 -21 L25 27 L-25 27 Z', class: 'piece-bevel' }));
     shape.append(svg('text', { class: 'piece-text', 'text-anchor': 'middle', y: 15 }, label(p)));
     group.append(shape);
     group.addEventListener('keydown', event => {
@@ -277,7 +277,8 @@ function renderGhost() {
   layer.append(svg('circle', { cx: v.x, cy: v.y, r: RADIUS * UNIT, fill: result.ok ? '#37795d22' : '#b0573622', stroke: result.ok ? '#2c7254' : '#ad553b', 'stroke-width': 2, 'stroke-dasharray': '5 4' }));
   const rotation = (candidate.side === 'gote') !== flipped ? 180 : 0;
   const held = svg('g', { class: `piece piece-preview ${result.ok ? 'valid' : 'invalid'}`, transform: `translate(${v.x} ${v.y}) rotate(${rotation}) scale(${PIECE_SCALE})`, 'pointer-events': 'none', 'aria-hidden': 'true' });
-  held.append(svg('path', { d: 'M0 -35 L24 -22 L30 29 Q0 35 -30 29 L-24 -22 Z', class: 'piece-body' }));
+  held.append(svg('path', { d: 'M0 -36 L23 -23 L29 31 L-29 31 L-23 -23 Z', class: 'piece-body' }));
+  held.append(svg('path', { d: 'M-20 -21 L0 -32 L20 -21 L25 27 L-25 27 Z', class: 'piece-bevel' }));
   held.append(svg('text', { class: 'piece-text', 'text-anchor': 'middle', y: 15 }, label(candidate)));
   layer.append(held);
 }
