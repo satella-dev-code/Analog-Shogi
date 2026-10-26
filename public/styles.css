@@ -45,8 +45,8 @@ h1 { margin: 0; font-size: 19px; font-weight: 600; letter-spacing: .04em; }
 #board:focus, #board:focus-visible { outline: none; }
 .piece { cursor: pointer; }
 .piece .hit-disc { fill: transparent; stroke: none; }
-.piece .piece-body { fill: url(#piece-wood); stroke: #7e694a; stroke-width: 1.6; stroke-linejoin: round; filter: drop-shadow(0 2.5px 0 #9b835d) drop-shadow(0 4px 2px #49391f22); }
-.piece .piece-text { font-family: var(--serif); font-size: 39px; font-weight: 700; fill: #242820; paint-order: stroke; stroke: #fff6df; stroke-width: .35px; }
+.piece .piece-body { fill: #f4ead5; stroke: #7e694a; stroke-width: 1.6; stroke-linejoin: round; filter: drop-shadow(0 2.5px 0 #9b835d) drop-shadow(0 4px 2px #49391f22); }
+.piece .piece-text { font-family: var(--serif); font-size: 39px; font-weight: 700; fill: #242820; stroke: none; }
 .piece.promoted .piece-text { fill: #a24e36; }
 .piece .piece-bevel { fill: none; stroke: #bda57b; stroke-width: .7; opacity: .6; pointer-events: none; }
 .piece:hover .piece-body { fill: #fffaf0; stroke: #4f6959; }
@@ -247,7 +247,7 @@ html[lang="en"] h1 { letter-spacing: .01em; }
 .game-actions .game-status { display: flex; flex: 0 1 auto; order: 0; flex-basis: auto; justify-content: flex-start; align-items: center; gap: 7px; margin: 0 5px 0 0; padding: 6px 10px; min-height: 32px; border: 1px solid #d2c1a8; border-radius: 5px; background: #f0e8db; }
 .game-actions .game-status h2 { color: #604b34; font-size: 13px; font-weight: 600; }
 .game-actions .game-status h2::before { display: block; width: 6px; height: 6px; background: #92714b; }
-.game-actions .move-number { color: #6b7d63; font-size: 10px; }
+.game-actions .move-number { color: #806e57; font-size: 10px; }
 .game-actions { flex-wrap: wrap; }
 html[lang="en"] .game-actions .move-number { display: inline; }
 @media(max-width: 520px) { .game-actions .game-status { padding: 5px 8px; gap: 5px; margin-right: 2px; } .game-actions .game-status h2 { font-size: 12px; } .game-actions .text-button { padding: 5px 8px; } .game-actions .action-spacer { display: none; } }
@@ -265,7 +265,7 @@ html:fullscreen, html:-webkit-full-screen { background: #f7f7f5; overflow: auto;
   border: 1px solid transparent; border-radius: 6px; background: transparent;
 }
 .hand-piece-face { width: 34px; height: 38px; overflow: visible; }
-.hand-piece-body { fill: url(#piece-wood); stroke: #7e694a; stroke-width: 1.6; stroke-linejoin: round; filter: drop-shadow(0 2.5px 0 #9b835d) drop-shadow(0 4px 2px #49391f22); }
+.hand-piece-body { fill: #f4ead5; stroke: #7e694a; stroke-width: 1.6; stroke-linejoin: round; filter: drop-shadow(0 2.5px 0 #9b835d) drop-shadow(0 4px 2px #49391f22); }
 .hand-piece-bevel { fill: none; stroke: #bda57b; stroke-width: .7; opacity: .6; }
 .hand-piece-text { font-family: var(--serif); font-size: 39px; font-weight: 700; fill: #242820; }
 .hand-piece sup {
@@ -286,3 +286,5 @@ html:fullscreen, html:-webkit-full-screen { background: #f7f7f5; overflow: auto;
 .hand-piece { flex-shrink: 0; }
 
 .creator-credit { margin-top: 24px; text-align: right; color: var(--muted); font-size: 10px; letter-spacing: .03em; }
+
+.piece .piece-bevel, .hand-piece-bevel { display: none; }
