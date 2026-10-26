@@ -57,7 +57,7 @@ export function captureTranslations(root) {
 export function applyLanguage() {
   document.documentElement.lang = language;
   document.title = language === 'en' ? 'Analog Shogi | Free Gridless Shogi Browser Game' : 'アナログ将棋｜マス目のない無料ブラウザ将棋ゲーム';
-  document.querySelector('meta[name="description"]')?.setAttribute('content', language === 'en' ? 'Play Analog Shogi, a free gridless shogi browser game for two players on one device. No installation required. Created by SateLLA.' : 'アナログ将棋は、マス目のない盤上を自由に動かす無料のブラウザ将棋ゲーム。駒の移動範囲を見ながら、同じ端末で2人対局を楽しめます。インストール不要。作成者 SateLLA。');
+  document.querySelector('meta[name="description"]')?.setAttribute('content', language === 'en' ? 'Shogi without a grid. Place your pieces anywhere. A free browser game for two players on one device.' : 'マス目を無くした、どこにでも置ける将棋。同じ端末で2人で遊べる無料ブラウザゲーム。');
   for (const [node, source] of staticTexts) node.textContent = source.replace(source.trim(), t(source.trim()));
   for (const [element, attr, source] of attributes) element.setAttribute(attr, t(source));
 }

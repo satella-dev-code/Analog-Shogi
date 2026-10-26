@@ -48,7 +48,6 @@ h1 { margin: 0; font-size: 19px; font-weight: 600; letter-spacing: .04em; }
 .piece .piece-body { fill: #f4ead5; stroke: #7e694a; stroke-width: 1.6; stroke-linejoin: round; filter: drop-shadow(0 2.5px 0 #9b835d) drop-shadow(0 4px 2px #49391f22); }
 .piece .piece-text { font-family: var(--serif); font-size: 39px; font-weight: 700; fill: #242820; stroke: none; }
 .piece.promoted .piece-text { fill: #a24e36; }
-.piece .piece-bevel { fill: none; stroke: #bda57b; stroke-width: .7; opacity: .6; pointer-events: none; }
 .piece:hover .piece-body { fill: #fffaf0; stroke: #4f6959; }
 .piece.selected .piece-body { fill: #fff; stroke: var(--accent); stroke-width: 3; }
 .piece .selection-ring { fill: #3b7e6314; stroke: var(--accent); stroke-width: 1.5; }
@@ -58,14 +57,8 @@ h1 { margin: 0; font-size: 19px; font-weight: 600; letter-spacing: .04em; }
 .game-actions .text-button:first-child { margin-left: -12px; }
 .game-actions .text-button:last-child { margin-right: -12px; }
 .action-spacer { flex: 1; }
-.selection-panel { padding: 8px 0 12px; border-top: 1px solid var(--line); }
-.selection-line { display: flex; align-items: center; gap: 14px; min-height: 36px; }
-.selection-line strong { font-family: var(--serif); font-size: 20px; font-weight: 500; }
-.selection-line output { color: var(--muted); font: 12px ui-monospace, SFMono-Regular, Consolas, monospace; font-variant-numeric: tabular-nums; }
-#cancel { margin-left: auto; margin-right: -12px; color: var(--muted); }
-.preview-message, .status-message { font-size: 12px; line-height: 1.7; color: var(--muted); margin: 4px 0 0; }
-.preview-message.valid { color: var(--accent); }
-.preview-message.invalid, .status-message.error { color: #a24e36; }
+.status-message { font-size: 12px; line-height: 1.7; color: var(--muted); margin: 4px 0 0; }
+.status-message.error { color: #a24e36; }
 .history-section { border-top: 1px solid var(--line); margin-top: 2px; padding-top: 12px; }
 .history-section summary { color: var(--muted); font-size: 12px; cursor: pointer; width: fit-content; padding: 4px 0; }
 #history-count { font-size: 10px; margin-left: 7px; }
@@ -81,10 +74,11 @@ dialog p, .rules-list { font-size: 12px; line-height: 1.9; color: #6e7666; }
 .dialog-heading { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
 .dialog-heading .text-button { margin-right: -12px; }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 28px; }
-.secondary-button, .primary-button { padding: 10px 16px; min-height: 42px; border: 1px solid #cdd3c5; border-radius: 5px; font-size: 12px; }
-.secondary-button { background: transparent; color: #56634d; }
-.primary-button { background: var(--accent); color: #fff; border-color: var(--accent); }
-.primary-button:hover:not(:disabled) { background: #294e42; }
+.secondary-button, .primary-button { padding: 10px 16px; min-height: 42px; border: 1px solid #d2c1a8; border-radius: 5px; font-size: 12px; }
+.secondary-button { background: transparent; color: #786044; }
+.secondary-button:hover:not(:disabled) { background: #f0e8db; }
+.primary-button { background: #786044; color: #fff; border-color: #786044; }
+.primary-button:hover:not(:disabled) { background: #604b34; }
 .rules-list { display: grid; grid-template-columns: 65px 1fr; gap: 12px; }
 .rules-list dt { color: #384531; font-weight: 600; }
 .rules-list dd { margin: 0; }
@@ -266,7 +260,6 @@ html:fullscreen, html:-webkit-full-screen { background: #f7f7f5; overflow: auto;
 }
 .hand-piece-face { width: 34px; height: 38px; overflow: visible; }
 .hand-piece-body { fill: #f4ead5; stroke: #7e694a; stroke-width: 1.6; stroke-linejoin: round; filter: drop-shadow(0 2.5px 0 #9b835d) drop-shadow(0 4px 2px #49391f22); }
-.hand-piece-bevel { fill: none; stroke: #bda57b; stroke-width: .7; opacity: .6; }
 .hand-piece-text { font-family: var(--serif); font-size: 39px; font-weight: 700; fill: #242820; }
 .hand-piece sup {
   position: absolute; right: -2px; bottom: 0; min-width: 16px; height: 16px;
@@ -286,5 +279,3 @@ html:fullscreen, html:-webkit-full-screen { background: #f7f7f5; overflow: auto;
 .hand-piece { flex-shrink: 0; }
 
 .creator-credit { margin-top: 24px; text-align: right; color: var(--muted); font-size: 10px; letter-spacing: .03em; }
-
-.piece .piece-bevel, .hand-piece-bevel { display: none; }

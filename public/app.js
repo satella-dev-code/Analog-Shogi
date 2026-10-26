@@ -1,3 +1,4 @@
+import { createRenderCache, createFrameScheduler } from './render-cache.js';
 import { t, sideName, pieceName, historyText, getLanguage, setLanguage, captureTranslations, applyLanguage } from './i18n.js';
 import { SIZE, RADIUS, MOVE_RANGE, BAND_HALF_WIDTH, PAWN_HALF_WIDTH, KNIGHT, SECTOR_HALF_ANGLE, TYPES, NAMES, label, clone, initialState, other, forward, isJump, isInCheck, captureDestination, threatenedPieceIds, validateMove, movePiece, createDropValidator, validateDrop, dropPiece } from './engine.js';
 
@@ -19,6 +20,12 @@ let confirmAction = null;
 let saveAvailable = true;
 const rangeVisibility = { own: false, opponent: false };
 const threatVisibility = { own: true, opponent: true };
+const cachedRender = createRenderCache();
+let displayedAllRanges = null;
+const cached = (key, compute) => cachedRender(state, flipped, key, compute);
+const checked = side => cached(`check:${side}`, () => isInCheck(state, side));
+const ghostFrames = createFrameScheduler(renderGhost, requestAnimationFrame, cancelAnimationFrame);
+
 
 function validSaved(s) {
   return s && ['sente', 'gote'].includes(s.turn) && Array.isArray(s.pieces) && s.pieces.length <= 40
@@ -85,7 +92,6 @@ function renderHands() {
       button.setAttribute('aria-pressed', active && selected?.drop === type ? 'true' : 'false');
       const face = svg('svg', { viewBox: '-36 -40 72 80', class: 'hand-piece-face', 'aria-hidden': 'true' });
       face.append(svg('path', { d: 'M0 -36 L23 -23 L29 31 L-29 31 L-23 -23 Z', class: 'hand-piece-body' }));
-      face.append(svg('path', { d: 'M-20 -21 L0 -32 L20 -21 L25 27 L-25 27 Z', class: 'hand-piece-bevel' }));
       face.append(svg('text', { 'text-anchor': 'middle', y: 15, class: 'hand-piece-text' }, NAMES[type]));
       button.append(face);
       const amount = document.createElement('sup');
@@ -107,7 +113,7 @@ function renderHands() {
 }
 
 function renderPieces() {
-  const threatened = threatenedPieceIds(state);
+  const threatened = cached('threats', () => threatenedPieceIds(state));
   for (const [key, side] of [['own', state.turn], ['opponent', other(state.turn)]]) {
     const button = $(key === 'own' ? 'own-threats' : 'opponent-threats');
     button.setAttribute('aria-pressed', String(threatVisibility[key]));
@@ -116,18 +122,17 @@ function renderPieces() {
   const layer = $('piece-layer'); layer.replaceChildren();
   for (const p of state.pieces) {
     const v = view(p);
-    const checked = p.type === 'K' && isInCheck(state, p.side);
+    const inCheck = p.type === 'K' && checked(p.side);
     const chosen = selected?.id === p.id;
     const threatSide = p.side === state.turn ? 'own' : 'opponent';
     const showThreat = threatened.has(p.id) && threatVisibility[threatSide];
-    const group = svg('g', { class: `piece${p.promoted ? ' promoted' : ''}${chosen ? ' selected' : ''}${checked ? ' checked' : ''}${showThreat ? ` threatened threat-${threatSide}` : ''}`, transform: `translate(${v.x} ${v.y})`, 'data-piece-id': p.id, role: 'button', tabindex: !state.winner && p.side === state.turn ? '0' : '-1', 'aria-label': `${sideName(p.side)} ${pieceName(label(p))} (${p.x.toFixed(2)}, ${p.y.toFixed(2)})${threatened.has(p.id) ? localized(' 取られる可能性あり', ' threatened') : ''}`, 'aria-pressed': chosen ? 'true' : 'false' });
+    const group = svg('g', { class: `piece${p.promoted ? ' promoted' : ''}${chosen ? ' selected' : ''}${inCheck ? ' checked' : ''}${showThreat ? ` threatened threat-${threatSide}` : ''}`, transform: `translate(${v.x} ${v.y})`, 'data-piece-id': p.id, role: 'button', tabindex: !state.winner && p.side === state.turn ? '0' : '-1', 'aria-label': `${sideName(p.side)} ${pieceName(label(p))} (${p.x.toFixed(2)}, ${p.y.toFixed(2)})${threatened.has(p.id) ? localized(' 取られる可能性あり', ' threatened') : ''}`, 'aria-pressed': chosen ? 'true' : 'false' });
     group.append(svg('circle', { r: 42 * PIECE_SCALE, class: 'hit-disc' }));
-    if (showThreat || checked) group.append(svg('circle', { r: 44 * PIECE_SCALE, class: 'threat-ring', 'pointer-events': 'none' }));
+    if (showThreat || inCheck) group.append(svg('circle', { r: 44 * PIECE_SCALE, class: 'threat-ring', 'pointer-events': 'none' }));
     if (chosen) group.append(svg('circle', { r: 43 * PIECE_SCALE, class: 'selection-ring' }));
     const rotation = (p.side === 'gote') !== flipped ? 180 : 0;
     const shape = svg('g', { transform: `rotate(${rotation}) scale(${PIECE_SCALE})`, 'pointer-events': 'none' });
     shape.append(svg('path', { d: 'M0 -36 L23 -23 L29 31 L-29 31 L-23 -23 Z', class: 'piece-body' }));
-    shape.append(svg('path', { d: 'M-20 -21 L0 -32 L20 -21 L25 27 L-25 27 Z', class: 'piece-bevel' }));
     shape.append(svg('text', { class: 'piece-text', 'text-anchor': 'middle', y: 15 }, label(p)));
     group.append(shape);
     group.addEventListener('keydown', event => {
@@ -150,6 +155,16 @@ function renderLastMove() {
 }
 
 function drawRange(p, layer, color = '#32745d', prefix = 'selected', captureHints = true, position = state) {
+  if (position === state) {
+    const key = `range:${p.id}:${color}:${prefix}:${captureHints}`;
+    const nodes = cached(key, () => {
+      const buffer = svg('g');
+      drawRange(p, buffer, color, prefix, captureHints, { ...position });
+      return buffer;
+    });
+    layer.append(...[...nodes.childNodes].map(node => node.cloneNode(true)));
+    return;
+  }
   const pos = view(p), direction = forward(p.side) * (flipped ? -1 : 1);
   const group = svg('g', { transform: `translate(${pos.x} ${pos.y}) scale(1 ${-direction})`, fill: color, 'fill-opacity': '0.16', stroke: color, 'stroke-opacity': '0.38', 'stroke-width': '1.5', 'pointer-events': 'none' });
   const type = p.promoted && ['P', 'L', 'N', 'S'].includes(p.type) ? 'G' : p.type;
@@ -214,37 +229,50 @@ function drawRange(p, layer, color = '#32745d', prefix = 'selected', captureHint
 function renderDropZones() {
   const layer = $('drop-zones-layer'); layer.replaceChildren();
   if (!selected?.drop) return;
-  const check = createDropValidator(state, selected.drop);
-  const resolution = isInCheck(state, state.turn) ? 72 : 240;
-  const canvas = document.createElement('canvas'); canvas.width = canvas.height = resolution;
-  const context = canvas.getContext('2d');
-  const pixels = context.createImageData(resolution, resolution);
-  for (let y = 0; y < resolution; y++) for (let x = 0; x < resolution; x++) {
-    const point = { x: (x + 0.5) / resolution * SIZE, y: (y + 0.5) / resolution * SIZE };
-    if (flipped) { point.x = SIZE - point.x; point.y = SIZE - point.y; }
-    if (!check(point).ok) continue;
-    const index = (y * resolution + x) * 4;
-    pixels.data[index] = 50; pixels.data[index + 1] = 130; pixels.data[index + 2] = 85; pixels.data[index + 3] = 36;
-  }
-  context.putImageData(pixels, 0, 0);
-  layer.append(svg('image', { href: canvas.toDataURL(), width: 900, height: 900 }));
+  const href = cached(`drop:${selected.drop}`, () => {
+    const check = createDropValidator(state, selected.drop);
+    const resolution = checked(state.turn) ? 72 : 240;
+    const canvas = document.createElement('canvas'); canvas.width = canvas.height = resolution;
+    const context = canvas.getContext('2d');
+    const pixels = context.createImageData(resolution, resolution);
+    for (let y = 0; y < resolution; y++) for (let x = 0; x < resolution; x++) {
+      const point = { x: (x + 0.5) / resolution * SIZE, y: (y + 0.5) / resolution * SIZE };
+      if (flipped) { point.x = SIZE - point.x; point.y = SIZE - point.y; }
+      if (!check(point).ok) continue;
+      const index = (y * resolution + x) * 4;
+      pixels.data[index] = 50; pixels.data[index + 1] = 130; pixels.data[index + 2] = 85; pixels.data[index + 3] = 36;
+    }
+    context.putImageData(pixels, 0, 0);
+    return canvas.toDataURL();
+  });
+  layer.append(svg('image', { href, width: 900, height: 900 }));
 }
 
 function renderRange() {
   renderDropZones();
-  const all = $('all-ranges-layer'); all.replaceChildren();
+  const all = $('all-ranges-layer');
   const sides = [
     ['own', state.turn, '#426eaa'],
     ['opponent', other(state.turn), '#b9653b'],
   ];
-  for (const [key, side, color] of sides) {
+  for (const [key, side] of sides) {
     const button = $(key === 'own' ? 'own-ranges' : 'opponent-ranges');
     button.setAttribute('aria-pressed', String(rangeVisibility[key]));
     button.title = localized(`${sideName(side)}の全駒の移動範囲`, `Show all ${sideName(side)} movement ranges`);
-    if (!rangeVisibility[key]) continue;
-    const combined = svg('g', { opacity: 0.65, 'pointer-events': 'none' });
-    for (const p of state.pieces.filter(p => p.side === side)) drawRange(p, combined, color, key, false);
-    all.append(combined);
+  }
+  const combined = cached(`all:${rangeVisibility.own}:${rangeVisibility.opponent}`, () => {
+    const buffer = svg('g');
+    for (const [key, side, color] of sides) {
+      if (!rangeVisibility[key]) continue;
+      const group = svg('g', { opacity: 0.65, 'pointer-events': 'none' });
+      for (const p of state.pieces) if (p.side === side) drawRange(p, group, color, key, false);
+      buffer.append(group);
+    }
+    return buffer;
+  });
+  if (displayedAllRanges !== combined) {
+    all.replaceChildren(combined);
+    displayedAllRanges = combined;
   }
   const selectedLayer = $('range-layer'); selectedLayer.replaceChildren();
   const p = currentPiece();
@@ -252,6 +280,7 @@ function renderRange() {
 }
 
 function renderGhost() {
+  ghostFrames.cancel();
   const layer = $('ghost-layer'); layer.replaceChildren();
   const previewLayer = $('drop-preview-layer'); previewLayer.replaceChildren();
   for (const node of $('piece-layer').children) {
@@ -263,8 +292,10 @@ function renderGhost() {
   const v = view(ghost), p = currentPiece();
   let candidate = p || { type: selected.drop, side: state.turn, promoted: false };
   if (result.ok) {
-    const placed = selected.drop ? dropPiece(state, selected.drop, ghost).state : movePiece(state, selected.id, ghost).state;
-    candidate = placed.pieces.find(piece => piece.id === (selected.drop ? state.nextId : selected.id));
+    candidate = selected.drop
+      ? { id: state.nextId, type: selected.drop, side: state.turn, ...ghost, promoted: false }
+      : { ...p, ...ghost, promoted: p.promoted || result.mustPromote };
+    const placed = { ...state, pieces: [...state.pieces.filter(piece => piece.id !== candidate.id && piece.id !== result.captured?.id), candidate] };
     drawRange(candidate, previewLayer, '#426eaa', 'candidate', false, { ...placed, turn: state.turn });
     if (result.captured) {
       $('piece-layer').querySelector(`[data-piece-id="${result.captured.id}"]`)?.classList.add('preview-captured');
@@ -278,7 +309,6 @@ function renderGhost() {
   const rotation = (candidate.side === 'gote') !== flipped ? 180 : 0;
   const held = svg('g', { class: `piece piece-preview ${result.ok ? 'valid' : 'invalid'}`, transform: `translate(${v.x} ${v.y}) rotate(${rotation}) scale(${PIECE_SCALE})`, 'pointer-events': 'none', 'aria-hidden': 'true' });
   held.append(svg('path', { d: 'M0 -36 L23 -23 L29 31 L-29 31 L-23 -23 Z', class: 'piece-body' }));
-  held.append(svg('path', { d: 'M-20 -21 L0 -32 L20 -21 L25 27 L-25 27 Z', class: 'piece-bevel' }));
   held.append(svg('text', { class: 'piece-text', 'text-anchor': 'middle', y: 15 }, label(candidate)));
   layer.append(held);
 }
@@ -288,7 +318,7 @@ function render() {
   board.classList.toggle('has-selection', !!selected);
   $('turn-title').textContent = state.winner ? localized(`${sideName(state.winner)}の勝ち`, `${sideName(state.winner)} wins`) : localized(`${sideName(state.turn)}の番`, `${sideName(state.turn)} to move`);
   $('move-number').textContent = localized(`${state.moveNumber}手目`, `Move ${state.moveNumber}`);
-  const inCheck = !state.winner && isInCheck(state, state.turn);
+  const inCheck = !state.winner && checked(state.turn);
   $('check-banner').hidden = !inCheck;
   $('check-banner').textContent = localized(`王手 · ${sideName(state.turn)}`, `Check · ${sideName(state.turn)}`);
   board.classList.toggle('in-check', inCheck);
@@ -342,7 +372,7 @@ board.addEventListener('pointerdown', event => {
 });
 board.addEventListener('pointermove', event => {
   if (!selected || pending) return;
-  ghost = destination(logical(event)); renderGhost();
+  ghost = destination(logical(event)); ghostFrames.schedule();
 });
 board.addEventListener('pointerup', event => {
   if (!pointer || pointer.id !== event.pointerId) return;
@@ -414,7 +444,7 @@ $('reset').addEventListener('click', () => confirm(t('新しい対局を始め�
 }));
 $('resign').addEventListener('click', () => confirm(localized(`${sideName(state.turn)}が投了しますか？`, `Resign as ${sideName(state.turn)}?`), localized(`${sideName(other(state.turn))}の勝ちで、この対局を終了します。`, `${sideName(other(state.turn))} wins and the game ends.`), () => {
   history.push(clone(state)); history = history.slice(-100);
-  state.winner = other(state.turn); selected = null; ghost = null;
+  state = { ...state, winner: other(state.turn) }; selected = null; ghost = null;
   save(); render(); message('');
 }));
 $('rules-open').addEventListener('click', () => $('rules-dialog').showModal());
