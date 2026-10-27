@@ -6,7 +6,7 @@
 
 **[遊ぶ → analog-shogi.pages.dev](https://analog-shogi.pages.dev/)**
 
-作成者：SateLLA
+作成者：SateLLA｜初回コミット：2026年10月26日（日本時間）
 
 ## 遊び方
 
