@@ -1,3 +1,5 @@
+import { loupeGeometry } from './touch-loupe.js';
+import { createRecord, appendRecord, recordFromHistory, readRecord, decodeRecord, samePosition, MAX_RECORD_BYTES } from './records.js';
 import { legalKingRange } from './king-range.js';
 import { movementBranches, unionPaths, pathsToSvg } from './range-geometry.js';
 import { captureReach } from './capture-reach.js';
@@ -15,10 +17,15 @@ const UNIT = 900 / SIZE;
 const PIECE_SCALE = UNIT / 100;
 let state = initialState();
 let history = [];
+let gameRecord = createRecord(state);
+let replay = null;
+let replayTimer = null;
 let selected = null;
 let ghost = null;
 let flipped = false;
 let pointer = null;
+let touchPoint = null;
+let loupeCorner = null;
 let pending = null;
 let confirmAction = null;
 let saveAvailable = true;
@@ -43,11 +50,17 @@ try {
     state = saved.state;
     history = Array.isArray(saved.history) ? saved.history.filter(validSaved).slice(-100) : [];
     flipped = false;
+    try {
+      const loaded = readRecord(saved.record);
+      if (!samePosition(loaded.frames.at(-1), state)) throw new Error();
+      gameRecord = loaded.record;
+    } catch { gameRecord = recordFromHistory(history, state); }
   }
-} catch { /* A missing or damaged save starts a new game. */ }
+} catch { state = initialState(); history = []; gameRecord = createRecord(state); }
 
 function save() {
-  try { localStorage.setItem(STORAGE, JSON.stringify({ version: 2, state, history, flipped })); saveAvailable = true; }
+  if (replay) return;
+  try { localStorage.setItem(STORAGE, JSON.stringify({ version: 2, state, history, flipped, record: gameRecord })); saveAvailable = true; }
   catch { saveAvailable = false; }
   $('save-note').hidden = saveAvailable;
   $('save-note').textContent = saveAvailable ? '' : t('自動保存できません。');
@@ -83,7 +96,7 @@ function renderHands() {
   for (const side of ['sente', 'gote']) {
     const container = $(`${side}-hand`);
     container.replaceChildren();
-    const active = state.turn === side && !state.winner;
+    const active = !replay && state.turn === side && !state.winner;
     $(`${side}-tray`).classList.toggle('active', active);
     for (const type of TYPES) {
       const count = state.hands[side][type] || 0;
@@ -130,7 +143,7 @@ function renderPieces() {
     const chosen = selected?.id === p.id;
     const threatSide = p.side === state.turn ? 'own' : 'opponent';
     const showThreat = threatened.has(p.id) && threatVisibility[threatSide];
-    const group = svg('g', { class: `piece${p.promoted ? ' promoted' : ''}${chosen ? ' selected' : ''}${inCheck ? ' checked' : ''}${showThreat ? ` threatened threat-${threatSide}` : ''}`, transform: `translate(${v.x} ${v.y})`, 'data-piece-id': p.id, role: 'button', tabindex: !state.winner && p.side === state.turn ? '0' : '-1', 'aria-label': `${sideName(p.side)} ${pieceName(label(p))} (${p.x.toFixed(2)}, ${p.y.toFixed(2)})${threatened.has(p.id) ? localized(' 取られる可能性あり', ' threatened') : ''}`, 'aria-pressed': chosen ? 'true' : 'false' });
+    const group = svg('g', { class: `piece${p.promoted ? ' promoted' : ''}${chosen ? ' selected' : ''}${inCheck ? ' checked' : ''}${showThreat ? ` threatened threat-${threatSide}` : ''}`, transform: `translate(${v.x} ${v.y})`, 'data-piece-id': p.id, role: 'button', tabindex: !replay && !state.winner && p.side === state.turn ? '0' : '-1', 'aria-label': `${sideName(p.side)} ${pieceName(label(p))} (${p.x.toFixed(2)}, ${p.y.toFixed(2)})${threatened.has(p.id) ? localized(' 取られる可能性あり', ' threatened') : ''}`, 'aria-pressed': chosen ? 'true' : 'false' });
     group.append(svg('circle', { r: 42 * PIECE_SCALE, class: 'hit-disc' }));
     if (inCheck) group.append(svg('circle', { r: RADIUS * UNIT, class: 'threat-ring', 'pointer-events': 'none' }));
     else if (chosen) group.append(svg('circle', { r: RADIUS * UNIT, class: 'selection-ring', 'pointer-events': 'none' }));
@@ -252,7 +265,7 @@ function renderGhost() {
     node.classList.toggle('in-transit', !!ghost && Number(node.dataset.pieceId) === selected?.id);
     node.classList.remove('preview-captured', 'preview-target', 'preview-check');
   }
-  if (!selected || !ghost) return;
+  if (!selected || !ghost) { renderLoupe(); return; }
   const result = selected.drop ? validateDrop(state, selected.drop, ghost) : validateMove(state, selected.id, ghost);
   const v = view(ghost), p = currentPiece();
   let candidate = p || { type: selected.drop, side: state.turn, promoted: false };
@@ -288,7 +301,32 @@ function renderGhost() {
   held.append(svg('path', { d: 'M0 -36 L23 -23 L29 31 L-29 31 L-23 -23 Z', class: 'piece-body' }));
   held.append(svg('text', { class: 'piece-text', 'text-anchor': 'middle', y: 15 }, label(candidate)));
   layer.append(held);
+  renderLoupe();
 }
+
+const loupe = $('touch-loupe');
+const loupeView = $('loupe-view');
+// Live SVG references reuse the existing scene, without copying the board per frame.
+for (const id of ['last-move-layer', 'all-ranges-layer', 'drop-zones-layer', 'range-layer', 'drop-preview-layer', 'piece-layer', 'ghost-layer']) {
+  loupeView.append(svg('use', { href: `#${id}` }));
+}
+const loupeCrosshair = svg('path', { fill: 'none', stroke: '#403b32', 'stroke-opacity': '.65', 'vector-effect': 'non-scaling-stroke', 'stroke-width': 1 });
+loupeView.append(loupeCrosshair);
+function renderLoupe() {
+  if (!touchPoint || !selected || !ghost || pending || replay) {
+    loupe.hidden = true; loupeCorner = null; return;
+  }
+  const geometry = loupeGeometry(board.getBoundingClientRect(), { width: innerWidth, height: innerHeight }, touchPoint, view(ghost), loupeCorner);
+  if (!geometry) { loupe.hidden = true; return; }
+  loupeCorner = geometry.corner;
+  loupe.style.left = `${geometry.left}px`; loupe.style.top = `${geometry.top}px`;
+  loupe.style.width = loupe.style.height = `${geometry.size}px`;
+  loupeView.setAttribute('viewBox', geometry.viewBox.join(' '));
+  const { x, y } = geometry.center, arm = geometry.span * .045, hole = geometry.span * .018;
+  loupeCrosshair.setAttribute('d', `M${x-arm} ${y}H${x-hole}M${x+hole} ${y}H${x+arm}M${x} ${y-arm}V${y-hole}M${x} ${y+hole}V${y+arm}`);
+  loupe.hidden = false;
+}
+function hideLoupe() { touchPoint = null; renderLoupe(); }
 
 function render() {
   renderHands(); renderLastMove(); renderRange(); renderPieces(); renderGhost();
@@ -299,48 +337,46 @@ function render() {
   $('check-banner').hidden = !inCheck;
   $('check-banner').textContent = localized(`王手 · ${sideName(state.turn)}`, `Check · ${sideName(state.turn)}`);
   board.classList.toggle('in-check', inCheck);
-  $('undo').disabled = history.length === 0;
-  $('resign').disabled = !!state.winner;
-  $('history-count').textContent = localized(`${state.log.length}手`, `${state.log.length}`);
-  const list = $('history'); list.replaceChildren();
-  if (!state.log.length) { const li = document.createElement('li'); li.className = 'empty-history'; li.textContent = t('着手なし'); list.append(li); }
-  for (const move of state.log.slice(-100).reverse()) {
-    const li = document.createElement('li');
-    const number = document.createElement('span'); number.textContent = String(move.number);
-    const text = document.createElement('span'); text.textContent = `${move.side === 'sente' ? '☗' : '☖'} ${historyText(move.text)}`;
-    li.append(number, text); list.append(li);
-  }
+  $('undo').disabled = !!replay || history.length === 0;
+  $('resign').disabled = !!replay || !!state.winner;
+  $('reset').disabled = !!replay;
+  renderRecord();
 }
 
 function selectPiece(piece) {
-  if (piece.side !== state.turn || state.winner || pending) return;
+  if (replay || piece.side !== state.turn || state.winner || pending) return;
   selected = { id: piece.id }; ghost = null;
   render(); message('');
 }
 function clearSelection() { selected = null; ghost = null; render(); }
 
 function commit(result) {
+  if (replay) return;
   if (!result.ok) { message(''); return; }
   history.push(clone(state)); history = history.slice(-100);
+  gameRecord = appendRecord(gameRecord, state, result.state);
   state = result.state; selected = null; ghost = null;
   save(); render();
   message('');
 }
 
 function attempt(raw) {
-  if (!selected || state.winner || pending) return;
+  if (replay || !selected || state.winner || pending) return;
   const to = destination(raw); ghost = to; renderGhost();
   if (selected.drop) { commit(dropPiece(state, selected.drop, to)); return; }
   const result = validateMove(state, selected.id, to);
   if (!result.ok) { message(''); return; }
   if (result.canPromote && !result.mustPromote) {
     pending = { id: selected.id, to };
+    hideLoupe();
     $('promotion-dialog').showModal();
   } else commit(movePiece(state, selected.id, to));
 }
 
 board.addEventListener('pointerdown', event => {
-  if (event.button !== 0 || pending || state.winner) return;
+  if (replay || event.button !== 0 || event.isPrimary === false || pending || state.winner || pointer) return;
+  if (event.cancelable) event.preventDefault();
+  touchPoint = null;
   const point = logical(event), hit = atPoint(point);
   pointer = { id: event.pointerId, x: event.clientX, y: event.clientY, own: !selected?.drop && hit?.side === state.turn, cancelOnClick: !!hit && hit.id === selected?.id };
   if (pointer.own) selectPiece(hit);
@@ -348,11 +384,17 @@ board.addEventListener('pointerdown', event => {
   board.focus({ preventScroll: true });
 });
 board.addEventListener('pointermove', event => {
-  if (!selected || pending) return;
+  if (!selected || pending || event.isPrimary === false) return;
+  if (event.pointerType === 'touch') {
+    if (!pointer || pointer.id !== event.pointerId) return;
+    if (Math.min(innerWidth, innerHeight) <= 700) touchPoint = { x: event.clientX, y: event.clientY };
+  } else hideLoupe();
   ghost = destination(logical(event)); ghostFrames.schedule();
 });
 board.addEventListener('pointerup', event => {
   if (!pointer || pointer.id !== event.pointerId) return;
+  if (event.cancelable) event.preventDefault();
+  hideLoupe();
   const moved = Math.hypot(event.clientX - pointer.x, event.clientY - pointer.y) > 5;
   const { own, cancelOnClick } = pointer; pointer = null;
   if (board.hasPointerCapture(event.pointerId)) board.releasePointerCapture(event.pointerId);
@@ -369,7 +411,11 @@ board.addEventListener('pointerup', event => {
   }
   attempt(to);
 });
-board.addEventListener('pointercancel', () => { pointer = null; ghost = null; renderGhost(); });
+board.addEventListener('pointercancel', () => { pointer = null; ghost = null; hideLoupe(); renderGhost(); });
+board.addEventListener('lostpointercapture', () => { if (pointer) { pointer = null; ghost = null; hideLoupe(); renderGhost(); } });
+for (const type of ['selectstart', 'contextmenu', 'dragstart']) board.addEventListener(type, event => event.preventDefault());
+window.addEventListener('resize', hideLoupe);
+window.addEventListener('scroll', hideLoupe, { passive: true });
 board.addEventListener('pointerleave', () => { if (!pointer) { ghost = null; renderGhost(); } });
 board.addEventListener('keydown', event => {
   if (!selected || pending || event.target !== board) return;
@@ -404,7 +450,8 @@ document.addEventListener('pointerdown', event => {
 });
 $('flip').addEventListener('click', () => { flipped = !flipped; ghost = null; save(); render(); });
 $('undo').addEventListener('click', () => {
-  if (!history.length) return;
+  if (replay || !history.length) return;
+  gameRecord = { ...gameRecord, steps: gameRecord.steps.slice(0, -1) };
   state = history.pop(); selected = null; ghost = null;
   save(); render(); message('');
 });
@@ -416,16 +463,119 @@ $('confirm-no').addEventListener('click', () => { confirmAction = null; $('confi
 $('confirm-dialog').addEventListener('cancel', () => { confirmAction = null; });
 $('confirm-yes').addEventListener('click', () => { const action = confirmAction; confirmAction = null; $('confirm-dialog').close(); action?.(); });
 $('reset').addEventListener('click', () => confirm(t('新しい対局を始めますか？'), t('現在の対局と棋譜を消して、初期配置に戻します。'), () => {
-  state = initialState(); history = []; selected = null; ghost = null;
+  state = initialState(); gameRecord = createRecord(state); history = []; selected = null; ghost = null;
   save(); render(); message('');
 }));
 $('resign').addEventListener('click', () => confirm(localized(`${sideName(state.turn)}が投了しますか？`, `Resign as ${sideName(state.turn)}?`), localized(`${sideName(other(state.turn))}の勝ちで、この対局を終了します。`, `${sideName(other(state.turn))} wins and the game ends.`), () => {
   history.push(clone(state)); history = history.slice(-100);
-  state = { ...state, winner: other(state.turn) }; selected = null; ghost = null;
+  const ended = { ...state, winner: other(state.turn) };
+  gameRecord = appendRecord(gameRecord, state, ended);
+  state = ended; selected = null; ghost = null;
   save(); render(); message('');
 }));
-$('rules-open').addEventListener('click', () => $('rules-dialog').showModal());
+$('rules-open').addEventListener('click', () => { stopReplay(); $('rules-dialog').showModal(); });
 $('rules-close').addEventListener('click', () => $('rules-dialog').close());
+function stopReplay() {
+  clearInterval(replayTimer); replayTimer = null;
+  if ($('replay-play')) {
+    $('replay-play').textContent = t('再生');
+    $('replay-play').setAttribute('aria-pressed', 'false');
+  }
+}
+function startReplay(record = gameRecord, index = 0, imported = false) {
+  if (pending || document.querySelector('dialog[open]')) return;
+  try {
+    const loaded = readRecord(record);
+    stopReplay();
+    const liveState = replay ? replay.liveState : state;
+    replay = { ...loaded, liveState, index: 0, imported };
+    selected = null; ghost = null; pointer = null;
+    document.querySelector('.history-section').open = true;
+    seekReplay(index);
+    $('replay-exit').focus();
+  } catch { message('棋譜ファイルの形式が正しくありません。', true); }
+}
+function seekReplay(index) {
+  if (!replay) return;
+  replay.index = Math.max(0, Math.min(replay.frames.length - 1, index));
+  state = replay.frames[replay.index];
+  if (replay.index === replay.frames.length - 1) stopReplay();
+  render(); message('');
+}
+function exitReplay() {
+  if (!replay) return;
+  stopReplay(); state = replay.liveState; replay = null;
+  save(); render(); message('');
+}
+function renderRecord() {
+  const record = replay?.record || gameRecord, total = record.steps.length;
+  $('replay-panel').hidden = !replay;
+  $('replay-start').disabled = !total || !!replay;
+  $('history-count').textContent = localized(`${total}操作`, `${total} actions`);
+  $('record-note').textContent = record.initial.moveNumber > 1
+    ? localized(`${record.initial.moveNumber}手目からの記録です。`, `Recording starts at move ${record.initial.moveNumber}.`)
+    : '';
+  $('record-note').hidden = !record.initial.moveNumber || record.initial.moveNumber === 1;
+  if (replay) {
+    const index = replay.index;
+    $('replay-heading').textContent = t(replay.imported ? '読み込んだ棋譜' : '棋譜再生');
+    $('replay-position').textContent = `${index} / ${total}`;
+    $('replay-slider').max = total; $('replay-slider').value = index;
+    $('replay-slider').setAttribute('aria-valuetext', `${index} / ${total}`);
+    for (const id of ['replay-first', 'replay-prev']) $(id).disabled = index === 0;
+    for (const id of ['replay-next', 'replay-last', 'replay-play']) $(id).disabled = index === total;
+    $('replay-play').textContent = t(replayTimer ? '一時停止' : '再生');
+    $('replay-play').setAttribute('aria-pressed', String(!!replayTimer));
+  }
+  const list = $('history'); list.replaceChildren();
+  if (!total) { const li = document.createElement('li'); li.className = 'empty-history'; li.textContent = t('着手なし'); list.append(li); }
+  // Keep long records responsive; the slider can still reach every position.
+  const end = replay ? Math.min(total, Math.max(100, replay.index + 50)) : total;
+  for (let i = end - 1; i >= Math.max(0, end - 100); i--) {
+    const move = record.steps[i].label;
+    const li = document.createElement('li'), button = document.createElement('button');
+    button.type = 'button'; button.className = 'record-move';
+    if (replay?.index === i + 1) button.setAttribute('aria-current', 'step');
+    const number = document.createElement('span'); number.textContent = String(move.number);
+    const text = document.createElement('span'); text.textContent = `${move.side === 'sente' ? '☗' : '☖'} ${move.kind === 'resign' ? t('投了') : historyText(move.text)}`;
+    button.append(number, text);
+    button.addEventListener('click', () => {
+      if (replay) { stopReplay(); seekReplay(i + 1); }
+      else startReplay(gameRecord, i + 1);
+    });
+    li.append(button); list.append(li);
+  }
+}
+$('replay-start').addEventListener('click', () => startReplay());
+$('replay-exit').addEventListener('click', exitReplay);
+for (const [id, index] of [['replay-first', () => 0], ['replay-prev', () => replay.index - 1], ['replay-next', () => replay.index + 1], ['replay-last', () => replay.frames.length - 1]]) {
+  $(id).addEventListener('click', () => { if (replay) { stopReplay(); seekReplay(index()); } });
+}
+$('replay-slider').addEventListener('input', event => { stopReplay(); seekReplay(Number(event.target.value)); });
+$('replay-play').addEventListener('click', () => {
+  if (!replay) return;
+  if (replayTimer) { stopReplay(); return; }
+  replayTimer = setInterval(() => { if (replay) seekReplay(replay.index + 1); }, 1000);
+  renderRecord();
+});
+document.addEventListener('visibilitychange', () => { if (document.hidden) { stopReplay(); hideLoupe(); } });
+$('record-download').addEventListener('click', () => {
+  const record = replay?.record || gameRecord;
+  const url = URL.createObjectURL(new Blob([JSON.stringify(record)], { type: 'application/json' }));
+  const link = document.createElement('a'); link.href = url; link.download = `analog-shogi-${new Date().toISOString().slice(0, 10)}.json`;
+  link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+});
+$('record-import').addEventListener('click', () => $('record-file').click());
+$('record-file').addEventListener('change', async event => {
+  const file = event.target.files[0]; event.target.value = '';
+  if (!file) return;
+  try {
+    if (file.size > MAX_RECORD_BYTES) throw new Error('棋譜ファイルが大きすぎます。');
+    const loaded = decodeRecord(await file.text());
+    startReplay(loaded.record, 0, true);
+  } catch (error) { message(error.message === '棋譜ファイルが大きすぎます。' ? error.message : '棋譜ファイルの形式が正しくありません。', true); }
+});
+
 captureTranslations(document.body);
 applyLanguage();
 $('language-toggle').textContent = getLanguage() === 'ja' ? 'EN' : '日本語';

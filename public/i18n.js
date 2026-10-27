@@ -1,4 +1,9 @@
 const translations = {
+  'スマホでは、駒をドラッグすると指から離れた隅に移動先を拡大表示します。': 'On phones, dragging a piece shows a magnified destination in a corner away from your finger.',
+  '棋譜再生': 'Replay', '読み込んだ棋譜': 'Imported replay', '対局に戻る': 'Return to game', '最初へ': 'First position', '一手戻る': 'Previous move', '一手進む': 'Next move', '最後へ': 'Last position', '再生位置': 'Replay position', '再生': 'Play', '一時停止': 'Pause', 'リプレイ': 'Replay', '棋譜を保存': 'Save record', '読み込む': 'Import',
+  '棋譜ファイルの形式が正しくありません。': 'Invalid game record file.', '棋譜ファイルが大きすぎます。': 'The record file is too large.',
+  '「棋譜」からリプレイや棋譜ファイルの保存・読み込みができます。再生中は対局を変更せず、「対局に戻る」で元の局面へ戻ります。': 'Open Moves to replay, save or import a record. Replay is read-only. Return to game restores your current position.',
+
   "2人で交互に操作します。駒を選び、移動先をクリックするかドラッグしてください。": "Two players take turns. Select a piece, then click a destination or drag it.",
   "色の見方": "Color guide",
   "色付きエリア": "Shaded areas",

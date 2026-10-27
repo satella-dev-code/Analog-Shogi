@@ -21,7 +21,10 @@
   <script type="application/ld+json">
   {"@context":"https://schema.org","@type":"WebApplication","url":"https://analog-shogi.pages.dev/","name":"アナログ将棋","alternateName":"Analog Shogi","description":"マス目のない盤上で駒を自由に動かす、2人用の無料ブラウザ将棋ゲーム。","applicationCategory":"GameApplication","operatingSystem":"Web browser","inLanguage":["ja","en"],"isAccessibleForFree":true,"offers":{"@type":"Offer","price":"0","priceCurrency":"JPY"},"author":{"@type":"Person","name":"SateLLA"}}
   </script>
-  <link rel="icon" href="./favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="./favicon.ico" sizes="16x16 32x32 48x48">
+  <link rel="icon" href="./favicon-32.png" type="image/png" sizes="32x32">
+  <link rel="icon" href="./favicon.svg?v=4" type="image/svg+xml" sizes="any">
+  <link rel="apple-touch-icon" href="./apple-touch-icon.png" sizes="180x180">
   <link rel="stylesheet" href="./styles.css">
   <script type="module" src="./app.js"></script>
 </head>
@@ -78,9 +81,30 @@
     </section>
     <p id="status" class="status-message" role="status" hidden></p>
     <p id="save-note" class="status-message error" role="status" hidden></p>
-    <details class="history-section"><summary>棋譜 <span id="history-count">0手</span></summary><ol id="history" aria-label="指し手の履歴"></ol></details>
+    <details class="history-section"><summary>棋譜 <span id="history-count">0手</span></summary>
+      <div class="record-actions"><button id="replay-start" type="button">リプレイ</button><button id="record-download" type="button">棋譜を保存</button><button id="record-import" type="button">読み込む</button><input id="record-file" type="file" accept=".json,application/json" hidden></div>
+      <section id="replay-panel" class="replay-panel" aria-label="棋譜再生" hidden>
+        <div class="replay-heading"><strong id="replay-heading">棋譜再生</strong><span id="replay-position"></span><button id="replay-exit" type="button">対局に戻る</button></div>
+        <div class="replay-controls">
+          <button id="replay-first" type="button" aria-label="最初へ" title="最初へ">|‹</button>
+          <button id="replay-prev" type="button" aria-label="一手戻る" title="一手戻る">‹</button>
+          <button id="replay-play" type="button" aria-pressed="false">再生</button>
+          <button id="replay-next" type="button" aria-label="一手進む" title="一手進む">›</button>
+          <button id="replay-last" type="button" aria-label="最後へ" title="最後へ">›|</button>
+          <input id="replay-slider" type="range" min="0" max="0" value="0" aria-label="再生位置">
+        </div>
+      </section>
+      <p id="record-note" class="record-note" hidden></p>
+      <ol id="history" aria-label="指し手の履歴"></ol>
+    </details>
     <footer class="creator-credit">作成者 SateLLA</footer>
   </main>
+  <div id="touch-loupe" class="touch-loupe" aria-hidden="true" hidden>
+    <svg id="loupe-view" viewBox="0 0 200 200" focusable="false">
+      <rect width="900" height="900" fill="url(#board-wood)"/>
+      <rect x="1" y="1" width="898" height="898" fill="none" stroke="#9b7845" stroke-width="2"/>
+    </svg>
+  </div>
   <dialog id="promotion-dialog" aria-labelledby="promotion-title"><h2 id="promotion-title">成りますか？</h2><div class="dialog-actions"><button id="promote-no" class="secondary-button">成らない</button><button id="promote-yes" class="primary-button">成る</button></div></dialog>
   <dialog id="confirm-dialog" aria-labelledby="confirm-title"><h2 id="confirm-title"></h2><p id="confirm-description"></p><div class="dialog-actions"><button id="confirm-no" class="secondary-button">キャンセル</button><button id="confirm-yes" class="primary-button">確定</button></div></dialog>
   <dialog id="rules-dialog" aria-labelledby="rules-title">
@@ -119,9 +143,11 @@
     <h3>勝敗</h3>
     <p>王に重なる位置へ相手が動ける状態が王手です。自分の王を王手にさらす手は禁止。詰みの自動判定はないため、投了で決着します。二歩・打ち歩詰めは禁止していません。千日手・持将棋の判定はありません。</p>
     <h3>操作・保存</h3>
+    <p>スマホでは、駒をドラッグすると指から離れた隅に移動先を拡大表示します。</p>
     <p>TabとEnterで駒を選択。盤上で矢印キーで移動先を調整し、Enterで確定します。刻みは0.1、Shiftで0.5、Altで0.01。Escで解除。</p>
     <p>任意の成りを選ぶ前は、不成の動きで予測します。</p>
     <p>対局はこのブラウザに自動保存します。待ったは最大100操作まで戻せます。</p>
+    <p>「棋譜」からリプレイや棋譜ファイルの保存・読み込みができます。再生中は対局を変更せず、「対局に戻る」で元の局面へ戻ります。</p>
   </dialog>
 </body>
 </html>
