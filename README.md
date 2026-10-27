@@ -6,7 +6,9 @@
 
 **[遊ぶ → analog-shogi.pages.dev](https://analog-shogi.pages.dev/)**
 
-作成者：SateLLA｜初回コミット：2026年10月26日（日本時間）
+作成者：SateLLA
+
+バージョンと公開日時は[Releases](https://github.com/satella-dev-code/Analog-Shogi/releases)に記録しています。
 
 ## 遊び方
 
