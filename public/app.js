@@ -1,7 +1,8 @@
+import { applyCpuMove } from './cpu.js';
 import { loupeGeometry } from './touch-loupe.js';
 import { createRecord, appendRecord, recordFromHistory, readRecord, decodeRecord, samePosition, MAX_RECORD_BYTES } from './records.js';
 import { legalKingRange } from './king-range.js';
-import { movementBranches, unionPaths, pathsToSvg } from './range-geometry.js';
+import { legalMovementBranches, unionPaths, pathsToSvg } from './range-geometry.js';
 import { captureReach } from './capture-reach.js';
 import { previewThreats } from './preview-threats.js';
 import { createRenderCache, createFrameScheduler } from './render-cache.js';
@@ -29,6 +30,11 @@ let loupeCorner = null;
 let pending = null;
 let confirmAction = null;
 let saveAvailable = true;
+let gameMode = 'local';
+let cpuWorker = null;
+let cpuTimer = null;
+let cpuDeadline = null;
+let cpuEpoch = 0;
 const rangeVisibility = { own: false, opponent: false };
 const threatVisibility = { own: true, opponent: true };
 const cachedRender = createRenderCache();
@@ -48,6 +54,7 @@ try {
   const saved = JSON.parse(localStorage.getItem(STORAGE));
   if (saved?.version === 2 && validSaved(saved.state)) {
     state = saved.state;
+    gameMode = saved.gameMode === 'cpu' ? 'cpu' : 'local';
     history = Array.isArray(saved.history) ? saved.history.filter(validSaved).slice(-100) : [];
     flipped = false;
     try {
@@ -60,7 +67,7 @@ try {
 
 function save() {
   if (replay) return;
-  try { localStorage.setItem(STORAGE, JSON.stringify({ version: 2, state, history, flipped, record: gameRecord })); saveAvailable = true; }
+  try { localStorage.setItem(STORAGE, JSON.stringify({ version: 2, state, history, flipped, record: gameRecord, gameMode })); saveAvailable = true; }
   catch { saveAvailable = false; }
   $('save-note').hidden = saveAvailable;
   $('save-note').textContent = saveAvailable ? '' : t('自動保存できません。');
@@ -96,7 +103,7 @@ function renderHands() {
   for (const side of ['sente', 'gote']) {
     const container = $(`${side}-hand`);
     container.replaceChildren();
-    const active = !replay && state.turn === side && !state.winner;
+    const active = !replay && !cpuTurn() && state.turn === side && !state.winner;
     $(`${side}-tray`).classList.toggle('active', active);
     for (const type of TYPES) {
       const count = state.hands[side][type] || 0;
@@ -131,7 +138,7 @@ function renderHands() {
 
 function renderPieces() {
   const threatened = cached('threats', () => threatenedPieceIds(state));
-  for (const [key, side] of [['own', state.turn], ['opponent', other(state.turn)]]) {
+  for (const [key, side] of [['own', 'sente'], ['opponent', 'gote']]) {
     const button = $(key === 'own' ? 'own-threats' : 'opponent-threats');
     button.setAttribute('aria-pressed', String(threatVisibility[key]));
     button.title = localized(`${sideName(side)}の取られそうな駒を表示`, `Show threatened ${sideName(side)} pieces`);
@@ -141,9 +148,9 @@ function renderPieces() {
     const v = view(p);
     const inCheck = p.type === 'K' && checked(p.side);
     const chosen = selected?.id === p.id;
-    const threatSide = p.side === state.turn ? 'own' : 'opponent';
+    const threatSide = p.side === 'sente' ? 'own' : 'opponent';
     const showThreat = threatened.has(p.id) && threatVisibility[threatSide];
-    const group = svg('g', { class: `piece${p.promoted ? ' promoted' : ''}${chosen ? ' selected' : ''}${inCheck ? ' checked' : ''}${showThreat ? ` threatened threat-${threatSide}` : ''}`, transform: `translate(${v.x} ${v.y})`, 'data-piece-id': p.id, role: 'button', tabindex: !replay && !state.winner && p.side === state.turn ? '0' : '-1', 'aria-label': `${sideName(p.side)} ${pieceName(label(p))} (${p.x.toFixed(2)}, ${p.y.toFixed(2)})${threatened.has(p.id) ? localized(' 取られる可能性あり', ' threatened') : ''}`, 'aria-pressed': chosen ? 'true' : 'false' });
+    const group = svg('g', { class: `piece${p.promoted ? ' promoted' : ''}${chosen ? ' selected' : ''}${inCheck ? ' checked' : ''}${showThreat ? ` threatened threat-${threatSide}` : ''}`, transform: `translate(${v.x} ${v.y})`, 'data-piece-id': p.id, role: 'button', tabindex: !replay && !cpuTurn() && !state.winner && p.side === state.turn ? '0' : '-1', 'aria-label': `${sideName(p.side)} ${pieceName(label(p))} (${p.x.toFixed(2)}, ${p.y.toFixed(2)})${threatened.has(p.id) ? localized(' 取られる可能性あり', ' threatened') : ''}`, 'aria-pressed': chosen ? 'true' : 'false' });
     group.append(svg('circle', { r: 42 * PIECE_SCALE, class: 'hit-disc' }));
     if (inCheck) group.append(svg('circle', { r: RADIUS * UNIT, class: 'threat-ring', 'pointer-events': 'none' }));
     else if (chosen) group.append(svg('circle', { r: RADIUS * UNIT, class: 'selection-ring', 'pointer-events': 'none' }));
@@ -186,7 +193,7 @@ function drawRange(p, layer, color = '#32745d', prefix = 'selected', captureHint
     drawVectorRange(legalKingRange(position, p).paths, layer, color, 41);
     return;
   }
-  const branches = movementBranches(position, p);
+  const branches = legalMovementBranches(position, p);
   drawVectorRange(unionPaths(branches.flatMap(branch => branch.paths)), layer, color, 41);
   if (captureHints) for (const branch of branches) {
     if (branch.target) drawVectorRange(branch.paths, layer, '#c28631', 38);
@@ -219,8 +226,8 @@ function renderRange() {
   renderDropZones();
   const all = $('all-ranges-layer');
   const sides = [
-    ['own', state.turn, '#426eaa'],
-    ['opponent', other(state.turn), '#b9653b'],
+    ['own', 'sente', '#426eaa'],
+    ['opponent', 'gote', '#b9653b'],
   ];
   for (const [key, side] of sides) {
     const button = $(key === 'own' ? 'own-ranges' : 'opponent-ranges');
@@ -276,7 +283,7 @@ function renderGhost() {
       : { ...p, ...ghost, promoted: p.promoted || result.mustPromote };
     const placed = { ...state, pieces: [...state.pieces.filter(piece => piece.id !== candidate.id && piece.id !== result.captured?.id), candidate] };
     drawCaptureReach(placed, candidate, previewLayer);
-    const threats = previewThreats(placed, candidate, threatVisibility);
+    const threats = previewThreats(placed, candidate, { own: threatVisibility[candidate.side === 'sente' ? 'own' : 'opponent'], opponent: threatVisibility[candidate.side === 'sente' ? 'opponent' : 'own'] });
     endangered = threats.endangered;
     for (const id of threats.targets) {
       const enemy = placed.pieces.find(piece => piece.id === id), point = view(enemy);
@@ -338,13 +345,18 @@ function render() {
   $('check-banner').textContent = localized(`王手 · ${sideName(state.turn)}`, `Check · ${sideName(state.turn)}`);
   board.classList.toggle('in-check', inCheck);
   $('undo').disabled = !!replay || history.length === 0;
-  $('resign').disabled = !!replay || !!state.winner;
+  $('resign').disabled = !!replay || cpuTurn() || !!state.winner;
   $('reset').disabled = !!replay;
   renderRecord();
+  $('game-mode').value = gameMode;
+  $('game-mode').disabled = !!replay;
+  $('cpu-status').hidden = !cpuTurn() || !!replay || !!state.winner;
+  $('cpu-status').textContent = t('CPUが考えています…');
+  scheduleCpu();
 }
 
 function selectPiece(piece) {
-  if (replay || piece.side !== state.turn || state.winner || pending) return;
+  if (replay || cpuTurn() || piece.side !== state.turn || state.winner || pending) return;
   selected = { id: piece.id }; ghost = null;
   render(); message('');
 }
@@ -361,11 +373,11 @@ function commit(result) {
 }
 
 function attempt(raw) {
-  if (replay || !selected || state.winner || pending) return;
+  if (replay || cpuTurn() || !selected || state.winner || pending) return;
   const to = destination(raw); ghost = to; renderGhost();
   if (selected.drop) { commit(dropPiece(state, selected.drop, to)); return; }
   const result = validateMove(state, selected.id, to);
-  if (!result.ok) { message(''); return; }
+  if (!result.ok) { message(result.reason, true); return; }
   if (result.canPromote && !result.mustPromote) {
     pending = { id: selected.id, to };
     hideLoupe();
@@ -374,7 +386,7 @@ function attempt(raw) {
 }
 
 board.addEventListener('pointerdown', event => {
-  if (replay || event.button !== 0 || event.isPrimary === false || pending || state.winner || pointer) return;
+  if (replay || cpuTurn() || event.button !== 0 || event.isPrimary === false || pending || state.winner || pointer) return;
   if (event.cancelable) event.preventDefault();
   touchPoint = null;
   const point = logical(event), hit = atPoint(point);
@@ -406,7 +418,7 @@ board.addEventListener('pointerup', event => {
   const result = selected?.drop ? validateDrop(state, selected.drop, to)
     : selected?.id ? validateMove(state, selected.id, to) : null;
   if (result && !result.ok) {
-    clearSelection(); message('');
+    clearSelection(); message(result.reason, true);
     return;
   }
   attempt(to);
@@ -451,16 +463,21 @@ document.addEventListener('pointerdown', event => {
 $('flip').addEventListener('click', () => { flipped = !flipped; ghost = null; save(); render(); });
 $('undo').addEventListener('click', () => {
   if (replay || !history.length) return;
-  gameRecord = { ...gameRecord, steps: gameRecord.steps.slice(0, -1) };
-  state = history.pop(); selected = null; ghost = null;
+  cancelCpu();
+  do {
+    gameRecord = { ...gameRecord, steps: gameRecord.steps.slice(0, -1) };
+    state = history.pop();
+  } while (gameMode === 'cpu' && state.turn === 'gote' && history.length);
+  selected = null; ghost = null;
   save(); render(); message('');
 });
 function confirm(title, description, action) {
+  cancelCpu();
   $('confirm-title').textContent = title; $('confirm-description').textContent = description;
   confirmAction = action; $('confirm-dialog').showModal();
 }
-$('confirm-no').addEventListener('click', () => { confirmAction = null; $('confirm-dialog').close(); });
-$('confirm-dialog').addEventListener('cancel', () => { confirmAction = null; });
+$('confirm-no').addEventListener('click', () => { confirmAction = null; $('confirm-dialog').close(); scheduleCpu(); });
+$('confirm-dialog').addEventListener('cancel', () => { confirmAction = null; setTimeout(scheduleCpu, 0); });
 $('confirm-yes').addEventListener('click', () => { const action = confirmAction; confirmAction = null; $('confirm-dialog').close(); action?.(); });
 $('reset').addEventListener('click', () => confirm(t('新しい対局を始めますか？'), t('現在の対局と棋譜を消して、初期配置に戻します。'), () => {
   state = initialState(); gameRecord = createRecord(state); history = []; selected = null; ghost = null;
@@ -473,8 +490,9 @@ $('resign').addEventListener('click', () => confirm(localized(`${sideName(state.
   state = ended; selected = null; ghost = null;
   save(); render(); message('');
 }));
-$('rules-open').addEventListener('click', () => { stopReplay(); $('rules-dialog').showModal(); });
-$('rules-close').addEventListener('click', () => $('rules-dialog').close());
+$('rules-open').addEventListener('click', () => { cancelCpu(); stopReplay(); $('rules-dialog').showModal(); });
+$('rules-close').addEventListener('click', () => { $('rules-dialog').close(); scheduleCpu(); });
+$('rules-dialog').addEventListener('cancel', () => setTimeout(scheduleCpu, 0));
 function stopReplay() {
   clearInterval(replayTimer); replayTimer = null;
   if ($('replay-play')) {
@@ -486,7 +504,7 @@ function startReplay(record = gameRecord, index = 0, imported = false) {
   if (pending || document.querySelector('dialog[open]')) return;
   try {
     const loaded = readRecord(record);
-    stopReplay();
+    cancelCpu(); stopReplay();
     const liveState = replay ? replay.liveState : state;
     replay = { ...loaded, liveState, index: 0, imported };
     selected = null; ghost = null; pointer = null;
@@ -548,6 +566,9 @@ function renderRecord() {
 }
 $('replay-start').addEventListener('click', () => startReplay());
 $('replay-exit').addEventListener('click', exitReplay);
+document.querySelector('.history-section').addEventListener('toggle', event => {
+  if (!event.currentTarget.open && replay) exitReplay();
+});
 for (const [id, index] of [['replay-first', () => 0], ['replay-prev', () => replay.index - 1], ['replay-next', () => replay.index + 1], ['replay-last', () => replay.frames.length - 1]]) {
   $(id).addEventListener('click', () => { if (replay) { stopReplay(); seekReplay(index()); } });
 }
@@ -574,6 +595,41 @@ $('record-file').addEventListener('change', async event => {
     const loaded = decodeRecord(await file.text());
     startReplay(loaded.record, 0, true);
   } catch (error) { message(error.message === '棋譜ファイルが大きすぎます。' ? error.message : '棋譜ファイルの形式が正しくありません。', true); }
+});
+
+function cpuTurn() { return gameMode === 'cpu' && state.turn === 'gote'; }
+function cancelCpu() {
+  cpuEpoch++; clearTimeout(cpuTimer); cpuTimer = null;
+  clearTimeout(cpuDeadline); cpuDeadline = null;
+  cpuWorker?.terminate(); cpuWorker = null;
+}
+function cpuUnavailable() {
+  cancelCpu(); gameMode = 'local'; save(); render();
+  message('CPUが指せる手を見つけられませんでした。2人対戦に切り替えました。', true);
+}
+function scheduleCpu() {
+  if (!cpuTurn() || replay || state.winner || pending || document.querySelector('dialog[open]') || cpuWorker || cpuTimer) return;
+  const before = state, epoch = cpuEpoch;
+  cpuTimer = setTimeout(() => {
+    cpuTimer = null;
+    if (before !== state || epoch !== cpuEpoch || replay || !cpuTurn()) return;
+    try {
+      cpuWorker = new Worker(new URL('./cpu-worker.js', import.meta.url), { type: 'module' });
+      cpuWorker.onmessage = ({ data }) => {
+        if (before !== state || epoch !== cpuEpoch || replay || !cpuTurn()) return;
+        const result = applyCpuMove(state, data.action);
+        cancelCpu();
+        if (result.ok) commit(result); else cpuUnavailable();
+      };
+      cpuWorker.onerror = () => { if (before === state && epoch === cpuEpoch) cpuUnavailable(); };
+      cpuDeadline = setTimeout(cpuUnavailable, 15000);
+      cpuWorker.postMessage({ ...state, log: [] });
+    } catch { cpuUnavailable(); }
+  }, 250);
+}
+$('game-mode').addEventListener('change', event => {
+  cancelCpu(); gameMode = event.target.value === 'cpu' ? 'cpu' : 'local';
+  selected = null; ghost = null; hideLoupe(); save(); render(); message('');
 });
 
 captureTranslations(document.body);

@@ -280,6 +280,7 @@ export function movePiece(state, id, to, promote = false) {
 }
 
 export function createDropValidator(state, type) {
+  const pawnFiles = type === 'P' ? state.pieces.filter(p => p.side === state.turn && p.type === 'P' && !p.promoted).map(p => p.x) : [];
   const king = state.pieces.find(p => p.side === state.turn && p.type === 'K');
   const checked = !king || isInCheck(state, state.turn);
   return to => {
@@ -289,6 +290,7 @@ export function createDropValidator(state, type) {
   if (state.pieces.some(p => Math.hypot(p.x - to.x, p.y - to.y) < 2 * RADIUS - EPS)) return { ok: false, reason: 'ほかの駒と重なる位置には打てません。' };
   const piece = { id: state.nextId, type, side: state.turn, ...to, promoted: false };
   if (!hasFutureMove(piece)) return { ok: false, reason: '次に動けなくなる位置には打てません。' };
+  if (pawnFiles.some(x => Math.abs(x - to.x) <= RADIUS + EPS)) return { ok: false, reason: '二歩です。自分の不成の歩の上下（左右0.3以内）には歩を打てません。' };
   if (checked && isInCheck({ ...state, pieces: [...state.pieces, piece] }, state.turn)) return { ok: false, reason: '自分の王の王手を解消してください。' };
   return { ok: true };
   };

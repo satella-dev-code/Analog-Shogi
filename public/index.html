@@ -15,7 +15,13 @@
   <meta property="og:site_name" content="アナログ将棋">
   <meta property="og:title" content="アナログ将棋｜マス目のない無料ブラウザ将棋ゲーム">
   <meta property="og:description" content="マス目を無くした、どこにでも置ける将棋。同じ端末で2人で遊べる無料ブラウザゲーム。">
-  <meta name="twitter:card" content="summary">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta property="og:image" content="https://analog-shogi.pages.dev/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="アナログ将棋の盤と、先手・後手それぞれの移動範囲">
+  <meta name="twitter:image" content="https://analog-shogi.pages.dev/og-image.png">
+  <meta name="twitter:image:alt" content="アナログ将棋の盤と、先手・後手それぞれの移動範囲">
   <meta name="twitter:title" content="アナログ将棋｜マス目のない将棋">
   <meta name="twitter:description" content="マス目を無くした、どこにでも置ける将棋。同じ端末で2人で遊べる無料ブラウザゲーム。">
   <script type="application/ld+json">
@@ -37,16 +43,18 @@
     <div class="display-toolbar">
       <div class="range-controls" role="group" aria-label="移動範囲の表示">
         <span class="control-label">範囲</span>
-        <div class="segmented-controls"><button id="own-ranges" class="text-button" aria-label="自分の範囲" aria-pressed="false">自分</button><button id="opponent-ranges" class="text-button" aria-label="相手の範囲" aria-pressed="false">相手</button></div>
+        <div class="segmented-controls"><button id="own-ranges" class="text-button" aria-label="先手の範囲" aria-pressed="false">先手</button><button id="opponent-ranges" class="text-button" aria-label="後手の範囲" aria-pressed="false">後手</button></div>
       </div>
       <div class="range-controls" role="group" aria-label="危険な駒のハイライト">
         <span class="control-label">危険</span>
-        <div class="segmented-controls"><button id="own-threats" class="text-button" aria-label="自分の危険" aria-pressed="true">自分</button><button id="opponent-threats" class="text-button" aria-label="相手の危険" aria-pressed="true">相手</button></div>
+        <div class="segmented-controls"><button id="own-threats" class="text-button" aria-label="先手の危険" aria-pressed="true">先手</button><button id="opponent-threats" class="text-button" aria-label="後手の危険" aria-pressed="true">後手</button></div>
       </div>
+      <div class="mode-row"><label for="game-mode">対戦モード</label><select id="game-mode"><option value="local">2人対戦</option><option value="cpu">CPU対戦（自分は先手）</option></select></div>
     </div>
     <div class="game-actions" aria-label="対局操作">
       <div class="game-status" aria-live="polite">
         <h2 id="turn-title">先手の番</h2>
+        <span id="cpu-status" role="status" hidden></span>
         <span id="check-banner" class="check-banner" role="alert" hidden>王手</span>
         <span id="move-number" class="move-number">1手目</span>
       </div>
@@ -109,25 +117,27 @@
   <dialog id="confirm-dialog" aria-labelledby="confirm-title"><h2 id="confirm-title"></h2><p id="confirm-description"></p><div class="dialog-actions"><button id="confirm-no" class="secondary-button">キャンセル</button><button id="confirm-yes" class="primary-button">確定</button></div></dialog>
   <dialog id="rules-dialog" aria-labelledby="rules-title">
     <div class="dialog-heading"><h2 id="rules-title">ルール</h2><button class="text-button" id="rules-close" aria-label="ルールを閉じる">閉じる</button></div>
-    <p>2人で交互に操作します。駒を選び、移動先をクリックするかドラッグしてください。</p>
+    <p>通常将棋をもとにした独自ルールです。二歩は独自の帯で制限します。打ち歩詰めの制限や詰みの自動判定はなく、投了で終了します。</p>
+    <p>CPU対戦は自分が先手、CPUが後手です。対戦モードは途中でも切り替えられます。CPUが候補手を見つけられない場合も、詰みとは判定しません。</p>
+    <p>手番の駒を操作します。駒を選び、移動先をクリックするかドラッグしてください。</p>
     <h3>色の見方</h3>
     <h4 class="color-guide-heading">色付きエリア</h4>
     <dl class="color-guide">
-      <dt><span class="color-swatch guide-blue" aria-hidden="true"></span>青い範囲</dt><dd>今置ける場所。全駒表示では自分の移動範囲。</dd>
+      <dt><span class="color-swatch guide-blue" aria-hidden="true"></span>青い範囲</dt><dd>選択した駒を今置ける場所。全駒表示では先手の移動範囲。</dd>
       <dt><span class="color-swatch guide-green" aria-hidden="true"></span>薄緑の範囲</dt><dd>置いた後、自分の駒の当たり判定が届く範囲。</dd>
-      <dt><span class="color-swatch guide-orange" aria-hidden="true"></span>橙の範囲</dt><dd>「相手の範囲」で表示する相手の移動範囲。</dd>
+      <dt><span class="color-swatch guide-orange" aria-hidden="true"></span>橙の範囲</dt><dd>全駒表示での後手の移動範囲。</dd>
       <dt><span class="color-swatch guide-ochre" aria-hidden="true"></span>黄土色の範囲</dt><dd>今、敵駒を取れる位置の目安。</dd>
     </dl>
     <h4 class="color-guide-heading">駒の色</h4>
     <dl class="color-guide">
-      <dt><span class="color-swatch guide-both" aria-hidden="true"></span>青・橙の駒</dt><dd>今取られる可能性がある駒。青は自分、橙は相手。</dd>
+      <dt><span class="color-swatch guide-both" aria-hidden="true"></span>青・橙の駒</dt><dd>今取られる可能性がある駒。青は先手、橙は後手。</dd>
       <dt><span class="color-swatch guide-purple" aria-hidden="true"></span>紫の駒</dt><dd>その位置に置くと取られる危険がある駒。</dd>
       <dt><span class="color-swatch guide-green" aria-hidden="true"></span>緑の敵駒</dt><dd>置いた後、持っている駒から取れる敵駒。</dd>
       <dt><span class="color-swatch guide-red" aria-hidden="true"></span>赤い駒</dt><dd>王なら王手。持っている駒なら置けない位置。</dd>
     </dl>
-    <p>「自分」は現在の手番側です。「範囲」「危険」で表示を切り替えられます。王手は常に表示します。</p>
+    <p>「先手」「後手」は手番や盤の向きにかかわらず固定です。「範囲」「危険」で表示を切り替えられます。王手は常に表示します。</p>
     <p>駒の周りの円は当たり判定です。薄い駒は移動元か、今取る予定の駒。文字だけが赤い駒は成駒です。</p>
-    <p>範囲は目安です。王手や重なりで置けない場所もあります。王の移動範囲は合法な場所だけを表示します。</p>
+    <p>移動範囲から、重なり・遮蔽物・王手で置けない場所を除外します。境界は描画精度による目安です。置けないときは理由を表示します。</p>
     <h3>移動</h3>
     <dl class="rules-list">
       <dt>王</dt><dd>全方向に距離2.0以内。王手になる位置を除いた、合法な移動先だけを表示します。</dd>
@@ -140,8 +150,9 @@
     <h3>駒取り・成り</h3>
     <p>移動先で敵1枚と重なれば取れ、指定した位置に止まります。味方や敵2枚との同時重なりは禁止です。持ち駒は空いた場所へ打てます。全駒共通で、移動の中心線が他の駒に当たらなければ進めます。桂だけは途中の駒を飛び越えられます。持ち駒を重ねて打って取ることはできません。盤の幅は12、駒の当たり判定の直径は0.6です。</p>
     <p>奥行き4の敵陣に移動前か移動後の中心が入ると成れます。次に動けなくなる歩・香・桂は強制成り。その位置への打ちは禁止です。</p>
+    <p>二歩：自分の不成の歩の上下には歩を打てません。既存の歩の中心から左右0.3以内の帯が、盤の上下端まで続きます。打つ歩の中心で判定し、帯の端も禁止です。成った歩や相手の歩は対象外。通常の歩の移動には適用しません。</p>
     <h3>勝敗</h3>
-    <p>王に重なる位置へ相手が動ける状態が王手です。自分の王を王手にさらす手は禁止。詰みの自動判定はないため、投了で決着します。二歩・打ち歩詰めは禁止していません。千日手・持将棋の判定はありません。</p>
+    <p>王に重なる位置へ相手が動ける状態が王手です。自分の王を王手にさらす手は禁止。詰みの自動判定はないため、投了で決着します。打ち歩詰めは禁止していません。千日手・持将棋の判定はありません。</p>
     <h3>操作・保存</h3>
     <p>スマホでは、駒をドラッグすると指から離れた隅に移動先を拡大表示します。</p>
     <p>TabとEnterで駒を選択。盤上で矢印キーで移動先を調整し、Enterで確定します。刻みは0.1、Shiftで0.5、Altで0.01。Escで解除。</p>

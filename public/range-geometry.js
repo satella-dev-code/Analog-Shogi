@@ -1,5 +1,5 @@
 import C from './vendor/clipper.js';
-import { SIZE, RADIUS, MOVE_RANGE, BAND_HALF_WIDTH, PAWN_HALF_WIDTH, KNIGHT, SECTOR_HALF_ANGLE, forward, isJump } from './engine.js';
+import { SIZE, RADIUS, MOVE_RANGE, BAND_HALF_WIDTH, PAWN_HALF_WIDTH, KNIGHT, SECTOR_HALF_ANGLE, forward, isJump, isInCheck } from './engine.js';
 
 // World coordinates are kept to a millionth. Curves are flattened directly from
 // their equations to a maximum sagitta of 0.001 world units (<0.1 SVG pixels).
@@ -154,6 +154,41 @@ export function kingMoves(position, king) {
     safe.push(...subtractPaths(branch.paths, attackedArea(fixed, king.side)));
   }
   return unionPaths(safe);
+}
+// Most branches are already legal: adding the mover to a board with a safe
+// king cannot expose that king. Only pins/check evasions need a safety mask.
+// Those exceptional regions use a conservative 0.04-unit display mesh; actual
+// placement always goes through the engine's continuous validation.
+export function legalMovementBranches(position, piece) {
+  if (position.winner) return [];
+  if (!position.pieces.some(p => p.type === 'K' && p.side === piece.side)) return movementBranches(position, piece);
+  if (piece.type === 'K') return [{ target: null, paths: kingMoves(position, piece) }];
+  return movementBranches(position, piece).map(branch => {
+    const fixed = position.pieces.filter(p => p.id !== piece.id && p.id !== branch.target?.id);
+    if (!branch.paths.length || !isInCheck({ pieces: fixed }, piece.side)) return branch;
+    const box = bounds(branch.paths), step = .04, safe = [];
+    const left = Math.max(RADIUS, Math.floor(box.left / S / step) * step);
+    const top = Math.max(RADIUS, Math.floor(box.top / S / step) * step);
+    const right = Math.min(SIZE - RADIUS, box.right / S), bottom = Math.min(SIZE - RADIUS, box.bottom / S);
+    const clear = (x, y) => !isInCheck({ pieces: [...fixed, { ...piece, x, y }] }, piece.side);
+    for (let y = top; y < bottom; y += step) {
+      let start = null;
+      const endY = Math.min(y + step, bottom);
+      for (let x = left; x < right; x += step) {
+        const endX = Math.min(x + step, right), cx = (x + endX) / 2, cy = (y + endY) / 2;
+        const usable = containsPoint(branch.paths, { x: cx, y: cy }) && clear(cx, cy)
+          && clear(x, y) && clear(endX, y) && clear(x, endY) && clear(endX, endY);
+        if (usable && start == null) start = x;
+        if (start != null && (!usable || endX >= right - 1e-9)) {
+          safe.push(rectangle(start, y, usable ? endX : x, endY)); start = null;
+        }
+      }
+    }
+    return { ...branch, paths: intersectPaths(branch.paths, unionPaths(safe)) };
+  });
+}
+export function legalMoves(position, piece) {
+  return unionPaths(legalMovementBranches(position, piece).flatMap(branch => branch.paths));
 }
 export function footprint(position, piece) {
   const centers = piece.type === 'K' ? kingMoves(position, piece) : geometricMoves(position, piece);

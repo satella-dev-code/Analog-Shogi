@@ -330,3 +330,22 @@ html:fullscreen, html:-webkit-full-screen { background: #f7f7f5; overflow: auto;
 .hand-piece { touch-action: manipulation; }
 .touch-loupe { position: fixed; z-index: 20; pointer-events: none; overflow: hidden; border: 2px solid #faf6ed; border-radius: 14px; background: #f7f3eb; box-shadow: 0 0 0 1px #9c8566, 0 5px 18px #30261940; }
 .touch-loupe svg { display: block; width: 100%; height: 100%; overflow: hidden; }
+
+.mode-row { display: flex; align-items: center; margin-left: auto; flex: 0 1 180px; min-width: 0; font-size: 12px; color: var(--muted); }
+.mode-row label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+#game-mode { font: inherit; color: #514735; background: #faf8f3; border: 1px solid #d2c1a8; border-radius: 6px; padding: 6px 8px; min-height: 34px; width: 100%; min-width: 0; max-width: 100%; text-overflow: ellipsis; }
+#cpu-status { font-size: 11px; color: #786044; }
+
+.display-toolbar { gap: 14px; flex-wrap: nowrap; }
+@media (max-width: 700px) {
+  .display-toolbar { gap: 6px; }
+  .range-controls { gap: 4px; flex-shrink: 0; }
+  .range-controls .text-button { padding: 4px 6px; gap: 4px; }
+  .mode-row { flex-basis: 140px; }
+  #game-mode { padding: 5px 4px; font-size: 11px; }
+}
+@media (max-width: 380px) {
+  .range-controls .text-button { padding: 5px 4px; font-size: 10px; }
+  .range-controls .text-button::before { display: none; }
+  .mode-row { flex-basis: 110px; }
+}

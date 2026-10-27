@@ -54,3 +54,21 @@ test('vector output has closed finite contours, without raster or smoothing comm
   const box = bounds(paths);
   assert.ok(box.left >= 0 && box.right <= 12 * GEOMETRY_SCALE);
 });
+
+test('legal non-king overlays remove pinned moves and show check evasions', async () => {
+  const {legalMoves} = await import('../public/range-geometry.js');
+  const cases=[
+    position([p(1,'K',6,11),p(2,'K',11,1,'gote'),p(3,'G',6,2.8),p(4,'R',6,2,'gote')]),
+    position([p(1,'K',6,11),p(2,'K',11,1,'gote'),p(3,'R',3,2.8),p(4,'R',6,2,'gote')]),
+  ];
+  for(const state of cases){
+    const piece=state.pieces[2], region=legalMoves(state,piece);
+    let legal=0, excluded=0;
+    for(let x=.53;x<11.6;x+=.23) for(let y=.53;y<11.6;y+=.23){
+      const to={x,y}, displayed=containsPoint(region,to), valid=validateMove(state,piece.id,to).ok;
+      if(displayed){assert.equal(valid,true,`${x},${y}`);legal++;}
+      if(!valid && containsPoint(geometricMoves(state,piece),to))excluded++;
+    }
+    assert.ok(legal>0);assert.ok(excluded>0);
+  }
+});

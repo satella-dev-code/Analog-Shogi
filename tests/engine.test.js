@@ -176,11 +176,12 @@ test('drops use arbitrary positions, consume hand and cannot overlap', () => {
   assert.equal(validateDrop(s, 'R', { x: 3, y: 4 }).ok, false);
 });
 
-test('dead drops are rejected and two pawns are allowed', () => {
+test('dead drops and double-pawn drops are rejected', () => {
   const s = position([piece(3, 'P', 3, 5)]); s.hands.sente.P = 2; s.hands.sente.N = 1;
   assert.equal(validateDrop(s, 'P', { x: 3, y: RADIUS }).ok, false);
   assert.equal(validateDrop(s, 'N', { x: 3, y: 1 }).ok, false);
-  assert.ok(validateDrop(s, 'P', { x: 3, y: 4 }).ok);
+  assert.equal(validateDrop(s, 'P', { x: 3, y: 4 }).ok, false);
+  assert.ok(validateDrop(s, 'P', { x: 3.31, y: 4 }).ok);
 });
 
 test('a drop can block check but unrelated drops cannot', () => {
@@ -432,4 +433,28 @@ test('smaller collision circles leave a 0.65 gap legal and capture only below 0.
   assert.equal(validateMove(s, 3, { x: 2, y: 3.59 }).ok, false);
   const corridor = position([piece(3, 'R', 2, 6), piece(4, 'P', 2.32, 4)]);
   assert.ok(validateMove(corridor, 3, { x: 2, y: 2 }).ok);
+});
+
+
+test('double-pawn rule uses the dropped center and the existing pawn radius for both sides', () => {
+  for (const side of ['sente', 'gote']) {
+    const s = position([piece(3, 'P', 4.5, 5, side)], side); s.hands[side].P = 2;
+    const prepared = createDropValidator(s, 'P');
+    for (const y of [0.8, 3, 7, 11.2]) for (const dx of [-RADIUS, 0, RADIUS]) {
+      const to = { x: 4.5 + dx, y };
+      assert.equal(prepared(to).ok, false);
+      assert.match(validateDrop(s, 'P', to).reason, /二歩/);
+      assert.equal(dropPiece(s, 'P', to).ok, false);
+    }
+    for (const dx of [-RADIUS - .0001, RADIUS + .0001]) assert.ok(validateDrop(s, 'P', { x: 4.5 + dx, y: 7 }).ok);
+  }
+});
+test('promoted pawns and enemies do not block pawn drops; other drops and normal pawn moves are unaffected', () => {
+  const s = position([piece(3, 'P', 4.5, 5, 'sente', true), piece(4, 'P', 4.5, 3, 'gote')]);
+  s.hands.sente.P = 1;
+  assert.ok(validateDrop(s, 'P', { x: 4.5, y: 7 }).ok);
+  s.pieces[2].promoted = false; s.hands.sente.G = 1;
+  assert.ok(validateDrop(s, 'G', { x: 4.5, y: 7 }).ok);
+  s.pieces.push(piece(5, 'P', 4.7, 7));
+  assert.ok(validateMove(s, 5, { x: 4.7, y: 6.5 }).ok);
 });
