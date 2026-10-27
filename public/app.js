@@ -1,3 +1,4 @@
+import { previewThreats } from './preview-threats.js';
 import { createRenderCache, createFrameScheduler } from './render-cache.js';
 import { t, sideName, pieceName, historyText, getLanguage, setLanguage, captureTranslations, applyLanguage } from './i18n.js';
 import { SIZE, RADIUS, MOVE_RANGE, BAND_HALF_WIDTH, PAWN_HALF_WIDTH, KNIGHT, SECTOR_HALF_ANGLE, TYPES, NAMES, label, clone, initialState, other, forward, isJump, isInCheck, captureDestination, threatenedPieceIds, validateMove, movePiece, createDropValidator, validateDrop, dropPiece } from './engine.js';
@@ -285,18 +286,30 @@ function renderGhost() {
   const previewLayer = $('drop-preview-layer'); previewLayer.replaceChildren();
   for (const node of $('piece-layer').children) {
     node.classList.toggle('in-transit', !!ghost && Number(node.dataset.pieceId) === selected?.id);
-    node.classList.remove('preview-captured');
+    node.classList.remove('preview-captured', 'preview-target', 'preview-check');
   }
   if (!selected || !ghost) return;
   const result = selected.drop ? validateDrop(state, selected.drop, ghost) : validateMove(state, selected.id, ghost);
   const v = view(ghost), p = currentPiece();
   let candidate = p || { type: selected.drop, side: state.turn, promoted: false };
+  let endangered = false;
   if (result.ok) {
     candidate = selected.drop
       ? { id: state.nextId, type: selected.drop, side: state.turn, ...ghost, promoted: false }
       : { ...p, ...ghost, promoted: p.promoted || result.mustPromote };
     const placed = { ...state, pieces: [...state.pieces.filter(piece => piece.id !== candidate.id && piece.id !== result.captured?.id), candidate] };
-    drawRange(candidate, previewLayer, '#426eaa', 'candidate', false, { ...placed, turn: state.turn });
+    drawRange(candidate, previewLayer, '#426eaa', 'candidate', false, placed);
+    const threats = previewThreats(placed, candidate, threatVisibility);
+    endangered = threats.endangered;
+    for (const id of threats.targets) {
+      const enemy = placed.pieces.find(piece => piece.id === id), point = view(enemy);
+      const isKing = enemy.type === 'K';
+      const targetNode = $('piece-layer').querySelector(`[data-piece-id="${id}"]`);
+      targetNode?.classList.add('preview-target');
+      if (isKing) targetNode?.classList.add('preview-check');
+      previewLayer.append(svg('circle', { cx: point.x, cy: point.y, r: 46 * PIECE_SCALE,
+        class: isKing ? 'preview-check-ring' : 'preview-target-ring', 'pointer-events': 'none' }));
+    }
     if (result.captured) {
       $('piece-layer').querySelector(`[data-piece-id="${result.captured.id}"]`)?.classList.add('preview-captured');
     }
@@ -307,7 +320,8 @@ function renderGhost() {
   }
   layer.append(svg('circle', { cx: v.x, cy: v.y, r: RADIUS * UNIT, fill: result.ok ? '#37795d22' : '#b0573622', stroke: result.ok ? '#2c7254' : '#ad553b', 'stroke-width': 2, 'stroke-dasharray': '5 4' }));
   const rotation = (candidate.side === 'gote') !== flipped ? 180 : 0;
-  const held = svg('g', { class: `piece piece-preview ${result.ok ? 'valid' : 'invalid'}`, transform: `translate(${v.x} ${v.y}) rotate(${rotation}) scale(${PIECE_SCALE})`, 'pointer-events': 'none', 'aria-hidden': 'true' });
+  const held = svg('g', { class: `piece piece-preview ${result.ok ? 'valid' : 'invalid'}${endangered ? ' preview-endangered' : ''}${candidate.promoted ? ' promoted' : ''}`, transform: `translate(${v.x} ${v.y}) rotate(${rotation}) scale(${PIECE_SCALE})`, 'pointer-events': 'none', 'aria-hidden': 'true' });
+  if (endangered) held.append(svg('circle', { r: 46, class: 'preview-danger-ring' }));
   held.append(svg('path', { d: 'M0 -36 L23 -23 L29 31 L-29 31 L-23 -23 Z', class: 'piece-body' }));
   held.append(svg('text', { class: 'piece-text', 'text-anchor': 'middle', y: 15 }, label(candidate)));
   layer.append(held);
@@ -467,6 +481,7 @@ for (const [id, key] of [['own-threats', 'own'], ['opponent-threats', 'opponent'
   $(id).addEventListener('click', () => {
     threatVisibility[key] = !threatVisibility[key];
     renderPieces();
+    renderGhost();
   });
 }
 

@@ -103,19 +103,7 @@ function captureReachable(piece, target) {
   return Math.abs(dx) <= BAND_HALF_WIDTH + margin && fy + margin > 0;
 }
 
-// Find a continuous destination overlapping exactly this enemy. Boundaries of
-// movement, board edges, landing circles and obstacle shadows partition the disk.
-export function captureDestination(state, piece, target, requireKingSafety = false) {
-  if (piece.side === target.side || !captureReachable(piece, target)) return null;
-  const valid = to => {
-    if (!inBoard(to) || !movementAllows(piece, to)) return false;
-    const overlaps = overlappingPieces(state, piece, to);
-    if (overlaps.length !== 1 || overlaps[0].id !== target.id || !pathClear(state, piece, to, target.id)) return false;
-    if (requireKingSafety && isInCheck(simulateMove(state, piece, to, target, !hasFutureMove({ ...piece, ...to })), piece.side)) return false;
-    return true;
-  };
-  const center = { x: target.x, y: target.y };
-  if (valid(center)) return center;
+function captureCurves(state, piece, target) {
   const curves = [];
   const circle = (x, y, r) => curves.push({ kind: 'circle', x, y, r });
   const line = (a, b, c) => { const length = Math.hypot(a, b); curves.push({ kind: 'line', a: a / length, b: b / length, c: c / length }); };
@@ -141,6 +129,70 @@ export function captureDestination(state, piece, target, requireKingSafety = fal
     if (d <= RADIUS) continue;
     const angle = Math.atan2(dy, dx), spread = Math.asin((RADIUS - EPS) / d);
     for (const sign of [-1, 1]) { const a = angle + sign * spread; relativeLine(-Math.sin(a), Math.cos(a)); }
+  }
+  return curves;
+}
+
+// Find a continuous destination overlapping exactly this enemy. Boundaries of
+// movement, board edges, landing circles and obstacle shadows partition the disk.
+export function captureDestination(state, piece, target, requireKingSafety = false) {
+  if (piece.side === target.side || !captureReachable(piece, target)) return null;
+  const valid = to => {
+    if (!inBoard(to) || !movementAllows(piece, to)) return false;
+    const overlaps = overlappingPieces(state, piece, to);
+    if (overlaps.length !== 1 || overlaps[0].id !== target.id || !pathClear(state, piece, to, target.id)) return false;
+    if (requireKingSafety && isInCheck(simulatePosition(state, piece, to, target, !hasFutureMove({ ...piece, ...to })), piece.side)) return false;
+    return true;
+  };
+  const center = { x: target.x, y: target.y };
+  if (valid(center)) return center;
+  const curves = captureCurves(state, piece, target);
+  const circle = (x, y, r) => curves.push({ kind: 'circle', x, y, r });
+  const line = (a, b, c) => curves.push({ kind: 'line', a, b, c });
+  if (requireKingSafety && piece.type !== 'K') {
+    const king = state.pieces.find(p => p.side === piece.side && p.type === 'K');
+    if (king) {
+      // Removing the mover exposes attacks that its landing may still block.
+      // Include boundaries of those blocking positions in the capture search.
+      const exposed = { pieces: state.pieces.filter(p => p.id !== piece.id && p.id !== target.id) };
+      for (const attacker of exposed.pieces) {
+        if (attacker.side === piece.side) continue;
+        const attack = captureDestination(exposed, attacker, king);
+        if (!attack) continue;
+        const kingDx = king.x - attacker.x, kingDy = king.y - attacker.y;
+        const kingDistance = Math.hypot(kingDx, kingDy);
+        const captureRadius = 2 * RADIUS - EPS;
+        const endpoints = [attack];
+        if (kingDistance > captureRadius) {
+          const angle = Math.atan2(kingDy, kingDx), spread = Math.asin(captureRadius / kingDistance);
+          const tangent = Math.sqrt(kingDistance * kingDistance - captureRadius * captureRadius);
+          for (const sign of [-1, 1]) endpoints.push({ x: attacker.x + Math.cos(angle + sign * spread) * tangent, y: attacker.y + Math.sin(angle + sign * spread) * tangent });
+        }
+        // Range edges and fixed blockers can narrow the king's capture disk.
+        // Find its angular extremes instead of assuming the center ray suffices.
+        const candidates = function* () {
+          yield* endpoints;
+          yield* diskWitnesses(king, captureRadius, captureCurves(exposed, attacker, king));
+        };
+        let left, right, minAngle = Infinity, maxAngle = -Infinity;
+        for (const point of candidates()) {
+          if (!inBoard(point) || !movementAllows(attacker, point) || !pathClear(exposed, attacker, point, king.id)) continue;
+          const dx = point.x - attacker.x, dy = point.y - attacker.y;
+          const angle = Math.atan2(kingDx * dy - kingDy * dx, kingDx * dx + kingDy * dy);
+          if (angle < minAngle) { minAngle = angle; left = point; }
+          if (angle > maxAngle) { maxAngle = angle; right = point; }
+        }
+        for (const point of [attack, left, right].filter(Boolean)) {
+          circle(point.x, point.y, captureRadius);
+          if (isJump(attacker)) continue;
+          const dx = point.x - attacker.x, dy = point.y - attacker.y, length = Math.hypot(dx, dy);
+          if (length <= EPS) continue;
+          const a = -dy / length, b = dx / length;
+          for (const sign of [-1, 1]) line(a, b, a * attacker.x + b * attacker.y + sign * (RADIUS - EPS));
+        }
+        circle(attacker.x, attacker.y, RADIUS - EPS);
+      }
+    }
   }
   for (const to of diskWitnesses(center, 2 * RADIUS - EPS, curves)) if (valid(to)) return to;
   return null;
@@ -176,6 +228,12 @@ export function hasFutureMove(piece) {
   });
 }
 
+// Legality only needs piece locations; do not copy hands or the growing log.
+function simulatePosition(state, piece, to, captured, promote) {
+  return { pieces: state.pieces.filter(p => p.id !== captured?.id).map(p => p.id === piece.id
+    ? { ...p, x: to.x, y: to.y, promoted: piece.promoted || promote } : p) };
+}
+
 function simulateMove(state, piece, to, captured, promote) {
   const next = clone(state);
   next.pieces = next.pieces.filter(p => p.id !== captured?.id);
@@ -198,7 +256,7 @@ export function validateMove(state, id, to) {
   if (captured?.type === 'K') return { ok: false, reason: '王は取らず、王手と投了で決着します。' };
   if (!pathClear(state, piece, to, captured?.id)) return { ok: false, reason: '移動経路がほかの駒に遮られています。' };
   const mustPromote = !hasFutureMove({ ...piece, ...to });
-  const next = simulateMove(state, piece, to, captured, mustPromote);
+  const next = simulatePosition(state, piece, to, captured, mustPromote);
   if (isInCheck(next, piece.side)) return { ok: false, reason: '自分の王が王手になるため指せません。' };
   return { ok: true, captured, canPromote: canPromote(piece, to), mustPromote };
 }

@@ -279,3 +279,13 @@ html:fullscreen, html:-webkit-full-screen { background: #f7f7f5; overflow: auto;
 .hand-piece { flex-shrink: 0; }
 
 .creator-credit { margin-top: 24px; text-align: right; color: var(--muted); font-size: 10px; letter-spacing: .03em; }
+
+/* Tactical hints for the hypothetical position, independent of current threats. */
+.piece-preview.preview-endangered .piece-body { fill: #cddffa; stroke: #315f9e; stroke-width: 4; }
+.preview-danger-ring { fill: #426eaa15; stroke: #315f9e; stroke-width: 3; stroke-dasharray: 5 3; }
+.piece.preview-target:not(.checked):not(.preview-check) .piece-body { fill: #f9dbc3; stroke: #b9653b; stroke-width: 4; }
+.preview-target-ring { fill: #b9653b15; stroke: #b9653b; stroke-width: 3; }
+.preview-check-ring { fill: #e11d4826; stroke: #be123c; stroke-width: 4; }
+
+.piece.preview-check .piece-body { fill: #ffe1e7; stroke: #be123c; stroke-width: 5; }
+.piece.preview-check .piece-text { fill: #9f1239; }

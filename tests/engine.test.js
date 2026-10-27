@@ -381,3 +381,43 @@ test('capture destination finds overlap beyond the center reach for each movemen
     assert.equal(validateMove(s, p.id, to).captured.id, target.id, type);
   }
 });
+
+test('danger detects captures that must keep shielding the king, despite tiny coordinate changes', () => {
+  const cases = [
+    [6.675, 0.7, 6.2, 1.2],
+    [6.675000000000001, 0.7, 6.2, 1.2],
+    [6.674999999999999, 0.7, 6.2, 1.2],
+    [6.825000000000003, 0.7, 6.3, 1.15],
+    [6.975000000000005, 1.7000000000000004, 6.28, 1.65],
+  ];
+  for (const [x, y, toX, toY] of cases) {
+    for (const rotate of [false, true]) {
+      const s = position([piece(3, 'R', 6, 1.5), piece(4, 'P', x, y, 'gote'), piece(5, 'R', 6, 0.5, 'gote')]);
+      Object.assign(s.pieces[0], { x: 6, y: 11 });
+      Object.assign(s.pieces[1], { x: 10, y: 1 });
+      const to = { x: toX, y: toY };
+      if (rotate) {
+        for (const p of s.pieces) { p.x = SIZE - p.x; p.y = SIZE - p.y; p.side = p.side === 'sente' ? 'gote' : 'sente'; }
+        s.turn = 'gote'; to.x = SIZE - to.x; to.y = SIZE - to.y;
+      }
+      const legal = validateMove(s, 3, to);
+      assert.ok(legal.ok); assert.equal(legal.captured.id, 4);
+      const destination = captureDestination(s, s.pieces[2], s.pieces[3], true);
+      assert.ok(destination, `safe capture at pawn x=${x}`);
+      assert.ok(validateMove(s, 3, destination).ok);
+      assert.ok(threatenedPieceIds(s).has(4));
+    }
+  }
+});
+
+test('validation ignores move history and committed moves keep the original state untouched', () => {
+  const s = position([piece(3, 'R', 2, 6), piece(4, 'P', 2, 3, 'gote')]);
+  Object.defineProperty(s, 'log', { enumerable: true, get() { throw new Error('validation read move history'); } });
+  assert.ok(validateMove(s, 3, { x: 2, y: 3 }).ok);
+  const original = position([piece(3, 'R', 2, 6), piece(4, 'P', 2, 3, 'gote')]);
+  const before = structuredClone(original);
+  const result = movePiece(original, 3, { x: 2, y: 3 });
+  assert.ok(result.ok); assert.deepEqual(original, before);
+  assert.equal(result.state.hands.sente.P, 1);
+  assert.equal(result.state.log.length, 1);
+});
