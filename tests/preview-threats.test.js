@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { movePiece, dropPiece } from '../public/engine.js';
+import { RADIUS, movePiece, dropPiece } from '../public/engine.js';
 import { previewThreats } from '../public/preview-threats.js';
 
 const piece = (id, type, x, y, side = 'sente', promoted = false) => ({ id, type, x, y, side, promoted });
@@ -32,7 +32,7 @@ test('drop preview uses the same incoming and outgoing highlights', () => {
 });
 
 test('preview respects blockers and does not highlight the piece already captured', () => {
-  const blocked = position([piece(3, 'R', 2, 6), piece(4, 'P', 2, 2, 'gote'), piece(5, 'G', 2, 4)]);
+  const blocked = position([piece(3, 'R', 2, 6), piece(4, 'P', 2, 2, 'gote'), piece(5, 'G', 2, 4.5)]);
   assert.equal(previewThreats(blocked, blocked.pieces[2]).targets.has(4), false);
   const original = position([piece(3, 'R', 2, 6), piece(4, 'P', 2, 4, 'gote')]);
   const result = movePiece(original, 3, { x: 2, y: 4 });
@@ -58,8 +58,8 @@ test('preview respects both threat toggles independently', () => {
 });
 
 test('preview includes forced promotion movement and checks against the enemy king', () => {
-  const state = position([piece(3, 'P', 2, 1), piece(4, 'P', 3.5, 0.35, 'gote')]);
-  const result = movePiece(state, 3, { x: 2, y: 0.35 });
+  const state = position([piece(3, 'P', 2, 1), piece(4, 'P', 3.5, RADIUS, 'gote')]);
+  const result = movePiece(state, 3, { x: 2, y: RADIUS });
   assert.ok(result.ok);
   const candidate = result.state.pieces.find(p => p.id === 3);
   assert.equal(candidate.promoted, true);

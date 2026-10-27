@@ -1,7 +1,7 @@
 import { diskWitnesses } from './geometry.js';
 // All coordinates are continuous. y grows downwards; sente moves towards y = 0.
 export const SIZE = 12;
-export const RADIUS = 0.35;
+export const RADIUS = 0.30;
 export const EPS = 1e-7;
 export const MOVE_RANGE = Object.freeze({ K: 2, P: 2, G: 2, S: 2.2 });
 export const BAND_HALF_WIDTH = 0.6;

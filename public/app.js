@@ -129,8 +129,8 @@ function renderPieces() {
     const showThreat = threatened.has(p.id) && threatVisibility[threatSide];
     const group = svg('g', { class: `piece${p.promoted ? ' promoted' : ''}${chosen ? ' selected' : ''}${inCheck ? ' checked' : ''}${showThreat ? ` threatened threat-${threatSide}` : ''}`, transform: `translate(${v.x} ${v.y})`, 'data-piece-id': p.id, role: 'button', tabindex: !state.winner && p.side === state.turn ? '0' : '-1', 'aria-label': `${sideName(p.side)} ${pieceName(label(p))} (${p.x.toFixed(2)}, ${p.y.toFixed(2)})${threatened.has(p.id) ? localized(' 取られる可能性あり', ' threatened') : ''}`, 'aria-pressed': chosen ? 'true' : 'false' });
     group.append(svg('circle', { r: 42 * PIECE_SCALE, class: 'hit-disc' }));
-    if (showThreat || inCheck) group.append(svg('circle', { r: 44 * PIECE_SCALE, class: 'threat-ring', 'pointer-events': 'none' }));
-    if (chosen) group.append(svg('circle', { r: 43 * PIECE_SCALE, class: 'selection-ring' }));
+    if (inCheck) group.append(svg('circle', { r: RADIUS * UNIT, class: 'threat-ring', 'pointer-events': 'none' }));
+    else if (chosen) group.append(svg('circle', { r: RADIUS * UNIT, class: 'selection-ring', 'pointer-events': 'none' }));
     const rotation = (p.side === 'gote') !== flipped ? 180 : 0;
     const shape = svg('g', { transform: `rotate(${rotation}) scale(${PIECE_SCALE})`, 'pointer-events': 'none' });
     shape.append(svg('path', { d: 'M0 -36 L23 -23 L29 31 L-29 31 L-23 -23 Z', class: 'piece-body' }));
@@ -150,9 +150,9 @@ function renderLastMove() {
   if (state.lastMove.from) {
     const from = view(state.lastMove.from);
     layer.append(svg('line', { x1: from.x, y1: from.y, x2: to.x, y2: to.y, stroke: '#897047', 'stroke-width': 2, 'stroke-dasharray': '6 8', opacity: 0.55 }));
-    layer.append(svg('circle', { cx: from.x, cy: from.y, r: 8, fill: 'none', stroke: '#897047', 'stroke-width': 2, opacity: 0.6 }));
+    layer.append(svg('rect', { x: from.x - 3, y: from.y - 3, width: 6, height: 6, fill: '#897047', opacity: 0.6 }));
   }
-  layer.append(svg('circle', { cx: to.x, cy: to.y, r: 40 * PIECE_SCALE, fill: '#5f795818', stroke: '#6d855c', 'stroke-width': 2, opacity: 0.65 }));
+  layer.append(svg('circle', { cx: to.x, cy: to.y, r: RADIUS * UNIT, fill: '#5f795818', stroke: '#6d855c', 'stroke-width': 2, opacity: 0.65 }));
 }
 
 function drawRange(p, layer, color = '#32745d', prefix = 'selected', captureHints = true, position = state) {
@@ -307,7 +307,7 @@ function renderGhost() {
       const targetNode = $('piece-layer').querySelector(`[data-piece-id="${id}"]`);
       targetNode?.classList.add('preview-target');
       if (isKing) targetNode?.classList.add('preview-check');
-      previewLayer.append(svg('circle', { cx: point.x, cy: point.y, r: 46 * PIECE_SCALE,
+      previewLayer.append(svg('circle', { cx: point.x, cy: point.y, r: RADIUS * UNIT,
         class: isKing ? 'preview-check-ring' : 'preview-target-ring', 'pointer-events': 'none' }));
     }
     if (result.captured) {
@@ -318,10 +318,9 @@ function renderGhost() {
     const from = view(p);
     layer.append(svg('line', { x1: from.x, y1: from.y, x2: v.x, y2: v.y, stroke: result.ok ? '#27694f' : '#ac573f', 'stroke-width': 2, 'stroke-dasharray': '4 5', opacity: 0.7 }));
   }
-  layer.append(svg('circle', { cx: v.x, cy: v.y, r: RADIUS * UNIT, fill: result.ok ? '#37795d22' : '#b0573622', stroke: result.ok ? '#2c7254' : '#ad553b', 'stroke-width': 2, 'stroke-dasharray': '5 4' }));
+  layer.append(svg('circle', { cx: v.x, cy: v.y, r: RADIUS * UNIT, fill: result.ok ? 'none' : '#b0573622', stroke: !result.ok ? '#ad553b' : endangered ? '#843da3' : '#426eaa', 'stroke-width': 2 }));
   const rotation = (candidate.side === 'gote') !== flipped ? 180 : 0;
   const held = svg('g', { class: `piece piece-preview ${result.ok ? 'valid' : 'invalid'}${endangered ? ' preview-endangered' : ''}${candidate.promoted ? ' promoted' : ''}`, transform: `translate(${v.x} ${v.y}) rotate(${rotation}) scale(${PIECE_SCALE})`, 'pointer-events': 'none', 'aria-hidden': 'true' });
-  if (endangered) held.append(svg('circle', { r: 46, class: 'preview-danger-ring' }));
   held.append(svg('path', { d: 'M0 -36 L23 -23 L29 31 L-29 31 L-23 -23 Z', class: 'piece-body' }));
   held.append(svg('text', { class: 'piece-text', 'text-anchor': 'middle', y: 15 }, label(candidate)));
   layer.append(held);

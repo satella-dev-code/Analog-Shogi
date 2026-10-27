@@ -101,7 +101,7 @@ dialog p, .rules-list { font-size: 12px; line-height: 1.9; color: #6e7666; }
 .piece.threat-own { --threat-fill: #dce8fa; --threat-line: #426eaa; }
 .piece.threat-opponent { --threat-fill: #f6e1d4; --threat-line: #b9653b; }
 .piece.threatened .piece-body { fill: var(--threat-fill); stroke: var(--threat-line); stroke-width: 3; }
-.piece .threat-ring { fill: none; stroke: var(--threat-line); stroke-width: 2; stroke-dasharray: 5 4; }
+.piece .threat-ring { fill: none; stroke: var(--threat-line); stroke-width: 2; }
 
 /* Check has a distinct red treatment, independent of optional threat colors. */
 .check-banner {
@@ -281,8 +281,7 @@ html:fullscreen, html:-webkit-full-screen { background: #f7f7f5; overflow: auto;
 .creator-credit { margin-top: 24px; text-align: right; color: var(--muted); font-size: 10px; letter-spacing: .03em; }
 
 /* Tactical hints for the hypothetical position, independent of current threats. */
-.piece-preview.preview-endangered .piece-body { fill: #cddffa; stroke: #315f9e; stroke-width: 4; }
-.preview-danger-ring { fill: #426eaa15; stroke: #315f9e; stroke-width: 3; stroke-dasharray: 5 3; }
+.piece-preview.preview-endangered .piece-body { fill: #f0dcfa; stroke: #843da3; stroke-width: 5; }
 .piece.preview-target:not(.checked):not(.preview-check) .piece-body { fill: #f9dbc3; stroke: #b9653b; stroke-width: 4; }
 .preview-target-ring { fill: #b9653b15; stroke: #b9653b; stroke-width: 3; }
 .preview-check-ring { fill: #e11d4826; stroke: #be123c; stroke-width: 4; }

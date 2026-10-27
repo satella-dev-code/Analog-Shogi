@@ -81,16 +81,16 @@ test('knight lands within the expanded forward disks and jumps blockers', () => 
 
 test('slider center lines collide only with the occluded part', () => {
   const p = piece(3, 'R', 2, 6);
-  const s = position([p, piece(4, 'P', 2.34, 4)]);
+  const s = position([p, piece(4, 'P', 2 + RADIUS - 0.01, 4)]);
   assert.equal(pathClear(s, p, { x: 2, y: 2 }), false);
-  s.pieces[3].x = 2.35;
+  s.pieces[3].x = 2 + RADIUS;
   assert.ok(pathClear(s, p, { x: 2, y: 2 }));
 });
 
 test('board boundary accounts for full piece radius', () => {
   const s = position([piece(3, 'R', 2, 4)]);
-  assert.ok(validateMove(s, 3, { x: 2, y: 0.35 }).ok);
-  assert.equal(validateMove(s, 3, { x: 2, y: 0.34 }).ok, false);
+  assert.ok(validateMove(s, 3, { x: 2, y: RADIUS }).ok);
+  assert.equal(validateMove(s, 3, { x: 2, y: RADIUS - 0.01 }).ok, false);
   assert.equal(inBoard({ x: NaN, y: 3 }), false);
 });
 
@@ -144,15 +144,15 @@ test('promotion is available when entering, leaving or moving within enemy zone'
 
 test('pawn promotion is forced only at the forward edge', () => {
   const s = position([piece(3, 'P', 3, 0.8)]);
-  assert.ok(validateMove(s, 3, { x: 3, y: 0.35 }).mustPromote);
-  assert.ok(movePiece(s, 3, { x: 3, y: 0.35 }).state.pieces.find(p => p.id === 3).promoted);
-  assert.equal(validateMove(s, 3, { x: 3, y: 0.351 }).mustPromote, false);
+  assert.ok(validateMove(s, 3, { x: 3, y: RADIUS }).mustPromote);
+  assert.ok(movePiece(s, 3, { x: 3, y: RADIUS }).state.pieces.find(p => p.id === 3).promoted);
+  assert.equal(validateMove(s, 3, { x: 3, y: RADIUS + 0.001 }).mustPromote, false);
 });
 
 test('knight dead positions account for full landing disks', () => {
-  assert.equal(hasFutureMove(piece(3, 'N', 3, 2.59)), false);
-  assert.ok(hasFutureMove(piece(3, 'N', 3, 2.61)));
-  assert.equal(hasFutureMove(piece(3, 'N', 3, 9.41, 'gote')), false);
+  assert.equal(hasFutureMove(piece(3, 'N', 3, KNIGHT.forward - KNIGHT.radius + RADIUS - 0.01)), false);
+  assert.ok(hasFutureMove(piece(3, 'N', 3, KNIGHT.forward - KNIGHT.radius + RADIUS + 0.01)));
+  assert.equal(hasFutureMove(piece(3, 'N', 3, SIZE - (KNIGHT.forward - KNIGHT.radius + RADIUS - 0.01), 'gote')), false);
 });
 
 test('promoted minor pieces move as gold; horse and dragon add unit disk', () => {
@@ -178,7 +178,7 @@ test('drops use arbitrary positions, consume hand and cannot overlap', () => {
 
 test('dead drops are rejected and two pawns are allowed', () => {
   const s = position([piece(3, 'P', 3, 5)]); s.hands.sente.P = 2; s.hands.sente.N = 1;
-  assert.equal(validateDrop(s, 'P', { x: 3, y: 0.35 }).ok, false);
+  assert.equal(validateDrop(s, 'P', { x: 3, y: RADIUS }).ok, false);
   assert.equal(validateDrop(s, 'N', { x: 3, y: 1 }).ok, false);
   assert.ok(validateDrop(s, 'P', { x: 3, y: 4 }).ok);
 });
@@ -206,7 +206,7 @@ test('capture and check use the widened bands too', () => {
   assert.ok(movePiece(s, 3, { x: 2.4, y: 2 }).ok);
   const check = position([piece(3, 'R', 7.6, 3, 'gote')]);
   assert.ok(isInCheck(check, 'sente'));
-  check.pieces.at(-1).x = 6.69;
+  check.pieces.at(-1).x = 6.79;
   assert.equal(isInCheck(check, 'sente'), false);
   const diagonal = position([piece(3, 'B', 2, 6), piece(4, 'P', 4.4, 3.9, 'gote')]);
   assert.ok(movePiece(diagonal, 3, { x: 4.4, y: 3.9 }).ok);
@@ -280,7 +280,7 @@ test('threat highlights evaluate both sides independently of turn', () => {
 });
 
 test('threat highlights exclude blocked captures and pinned attackers', () => {
-  const blocked = position([piece(3, 'G', 2, 6), piece(4, 'R', 2, 2, 'gote'), piece(5, 'P', 2, 4)]);
+  const blocked = position([piece(3, 'G', 2, 6), piece(4, 'R', 2, 2, 'gote'), piece(5, 'P', 2, 3.5)]);
   assert.equal(threatenedPieceIds(blocked).has(3), false);
   const pinned = position([piece(3, 'R', 8, 6), piece(4, 'R', 8, 4, 'gote'), piece(5, 'G', 7, 4)]);
   assert.equal(threatenedPieceIds(pinned).has(5), false);
@@ -352,26 +352,26 @@ test('overlap capture rejects friends, two enemies, and capture by dropping', ()
 });
 
 test('overlap at the far corner captures and checks even beyond center reach', () => {
-  const s = position([piece(3, 'P', 4, 6), piece(4, 'S', 5.29, 3.99, 'gote')]);
+  const s = position([piece(3, 'P', 4, 6), piece(4, 'S', 5.19, 3.99, 'gote')]);
   const r = movePiece(s, 3, { x: 4.6, y: 4 });
   assert.ok(r.ok); assert.equal(r.state.hands.sente.S, 1);
-  const check = position([piece(3, 'P', 6.71, 5.99, 'gote')]);
+  const check = position([piece(3, 'P', 6.81, 5.99, 'gote')]);
   assert.ok(isInCheck(check, 'sente'));
-  check.pieces.at(-1).x = 6.69;
+  check.pieces.at(-1).x = 6.79;
   assert.equal(isInCheck(check, 'sente'), false);
 });
 
 test('touching without overlap does not capture and near-capture cannot bypass a blocker', () => {
   const s = position([piece(3, 'R', 2, 6), piece(4, 'P', 2, 3, 'gote')]);
-  assert.equal(validateMove(s, 3, { x: 2, y: 3.7 }).captured, undefined);
-  assert.ok(validateMove(s, 3, { x: 2, y: 3.699 }).captured);
+  assert.equal(validateMove(s, 3, { x: 2, y: 3 + 2 * RADIUS }).captured, undefined);
+  assert.ok(validateMove(s, 3, { x: 2, y: 3 + 2 * RADIUS - 0.001 }).captured);
   s.pieces.push(piece(5, 'G', 2, 4.5));
   assert.equal(validateMove(s, 3, { x: 2, y: 3.6 }).ok, false);
 });
 
 
 test('capture destination finds overlap beyond the center reach for each movement shape', () => {
-  for (const [type, x, y] of [['K', 6.6, 6], ['P', 5.29, 3.99], ['G', 6.59, 6.4], ['S', 4, 3.2], ['L', 5.2, 2], ['R', 5.2, 2], ['B', 7.2, 4], ['N', 6.6, 2.8]]) {
+  for (const [type, x, y] of [['K', 6.5, 6], ['P', 5.19, 3.99], ['G', 6.49, 6.4], ['S', 4, 3.3], ['L', 5.1, 2], ['R', 5.1, 2], ['B', 7.2, 4], ['N', 6.6, 2.8]]) {
     const p = piece(3, type, 4, 6), target = piece(4, 'P', x, y, 'gote');
     const s = position([p, target]);
     assert.equal(movementAllows(p, target), false, type);
@@ -384,11 +384,11 @@ test('capture destination finds overlap beyond the center reach for each movemen
 
 test('danger detects captures that must keep shielding the king, despite tiny coordinate changes', () => {
   const cases = [
-    [6.675, 0.7, 6.2, 1.2],
-    [6.675000000000001, 0.7, 6.2, 1.2],
-    [6.674999999999999, 0.7, 6.2, 1.2],
-    [6.825000000000003, 0.7, 6.3, 1.15],
-    [6.975000000000005, 1.7000000000000004, 6.28, 1.65],
+    [6.575, 0.7, 6.18, 1.08],
+    [6.575000000000001, 0.7, 6.18, 1.08],
+    [6.574999999999999, 0.7, 6.18, 1.08],
+    [6.720000000000003, 0.7, 6.25, 1.06],
+    [6.820000000000005, 1.7000000000000004, 6.23, 1.65],
   ];
   for (const [x, y, toX, toY] of cases) {
     for (const rotate of [false, true]) {
@@ -420,4 +420,16 @@ test('validation ignores move history and committed moves keep the original stat
   assert.ok(result.ok); assert.deepEqual(original, before);
   assert.equal(result.state.hands.sente.P, 1);
   assert.equal(result.state.log.length, 1);
+});
+
+test('smaller collision circles leave a 0.65 gap legal and capture only below 0.6', () => {
+  const s = position([piece(3, 'R', 2, 6), piece(4, 'P', 2, 3, 'gote')]);
+  const outside = validateMove(s, 3, { x: 2, y: 3.65 });
+  assert.ok(outside.ok); assert.equal(outside.captured, undefined);
+  assert.equal(validateMove(s, 3, { x: 2, y: 3.59 }).captured.id, 4);
+  s.pieces[3].side = 'sente';
+  assert.ok(validateMove(s, 3, { x: 2, y: 3.65 }).ok);
+  assert.equal(validateMove(s, 3, { x: 2, y: 3.59 }).ok, false);
+  const corridor = position([piece(3, 'R', 2, 6), piece(4, 'P', 2.32, 4)]);
+  assert.ok(validateMove(corridor, 3, { x: 2, y: 2 }).ok);
 });
