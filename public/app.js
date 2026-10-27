@@ -1,7 +1,10 @@
+import { legalKingRange } from './king-range.js';
+import { movementBranches, unionPaths, pathsToSvg } from './range-geometry.js';
+import { captureReach } from './capture-reach.js';
 import { previewThreats } from './preview-threats.js';
 import { createRenderCache, createFrameScheduler } from './render-cache.js';
 import { t, sideName, pieceName, historyText, getLanguage, setLanguage, captureTranslations, applyLanguage } from './i18n.js';
-import { SIZE, RADIUS, MOVE_RANGE, BAND_HALF_WIDTH, PAWN_HALF_WIDTH, KNIGHT, SECTOR_HALF_ANGLE, TYPES, NAMES, label, clone, initialState, other, forward, isJump, isInCheck, captureDestination, threatenedPieceIds, validateMove, movePiece, createDropValidator, validateDrop, dropPiece } from './engine.js';
+import { SIZE, RADIUS, TYPES, NAMES, label, clone, initialState, other, isInCheck, threatenedPieceIds, validateMove, movePiece, createDropValidator, validateDrop, dropPiece } from './engine.js';
 
 const $ = id => document.getElementById(id);
 const localized = (ja, en) => getLanguage() === 'en' ? en : ja;
@@ -166,64 +169,14 @@ function drawRange(p, layer, color = '#32745d', prefix = 'selected', captureHint
     layer.append(...[...nodes.childNodes].map(node => node.cloneNode(true)));
     return;
   }
-  const pos = view(p), direction = forward(p.side) * (flipped ? -1 : 1);
-  const group = svg('g', { transform: `translate(${pos.x} ${pos.y}) scale(1 ${-direction})`, fill: color, 'fill-opacity': '0.16', stroke: color, 'stroke-opacity': '0.38', 'stroke-width': '1.5', 'pointer-events': 'none' });
-  const type = p.promoted && ['P', 'L', 'N', 'S'].includes(p.type) ? 'G' : p.type;
-  const range = (MOVE_RANGE[type] || MOVE_RANGE.K) * UNIT;
-  const disk = () => group.append(svg('circle', { r: MOVE_RANGE.K * UNIT }));
-  const sector = degrees => {
-    const point = angle => ({ x: Math.sin(angle * Math.PI / 180) * range, y: -Math.cos(angle * Math.PI / 180) * range });
-    const a = point(degrees - SECTOR_HALF_ANGLE), b = point(degrees + SECTOR_HALF_ANGLE);
-    group.append(svg('path', { d: `M0 0 L${a.x} ${a.y} A${range} ${range} 0 0 1 ${b.x} ${b.y} Z` }));
-  };
-  const band = (rotation, oneWay = false) => {
-    const half = BAND_HALF_WIDTH * UNIT, far = 900 * Math.SQRT2;
-    group.append(svg('rect', { x: -half, y: -far, width: half * 2, height: oneWay ? far : far * 2, transform: `rotate(${rotation})` }));
-  };
-  switch (type) {
-    case 'K': disk(); break;
-    case 'P': group.append(svg('rect', { x: -PAWN_HALF_WIDTH * UNIT, y: -MOVE_RANGE.P * UNIT, width: PAWN_HALF_WIDTH * 2 * UNIT, height: MOVE_RANGE.P * UNIT })); break;
-    case 'G': [0, 45, -45, 90, -90, 180].forEach(sector); break;
-    case 'S': [0, 45, -45, 135, -135].forEach(sector); break;
-    case 'N': [-1, 1].forEach(sign => group.append(svg('circle', { cx: sign * KNIGHT.lateral * UNIT, cy: -KNIGHT.forward * UNIT, r: KNIGHT.radius * UNIT }))); break;
-    case 'L': band(0, true); break;
-    case 'R': [0, 90].forEach(angle => band(angle)); if (p.promoted) disk(); break;
-    case 'B': [-45, 45].forEach(angle => band(angle)); if (p.promoted) disk(); break;
+  if (p.type === 'K') {
+    drawVectorRange(legalKingRange(position, p).paths, layer, color, 41);
+    return;
   }
-  const maskedShape = (excludeId, suffix, captureTarget = null) => {
-    const maskId = `path-${prefix}-${p.id}-${suffix}`;
-    const mask = svg('mask', { id: maskId, maskUnits: 'userSpaceOnUse', x: 0, y: 0, width: 900, height: 900 });
-    mask.append(svg('rect', { width: 900, height: 900, fill: 'white' }));
-    for (const obstacle of position.pieces) {
-      if (obstacle.id === p.id || obstacle.id === excludeId) continue;
-      const v = view(obstacle), dx = v.x - pos.x, dy = v.y - pos.y;
-      const distance = Math.hypot(dx, dy), radius = RADIUS * UNIT;
-      mask.append(svg('circle', { cx: v.x, cy: v.y, r: radius * 2, fill: 'black' }));
-      if (isJump(p) || distance <= radius) continue;
-      const angle = Math.atan2(dy, dx), spread = Math.asin(radius / distance);
-      const tangent = Math.sqrt(distance * distance - radius * radius);
-      const point = (a, length) => `${pos.x + Math.cos(a) * length} ${pos.y + Math.sin(a) * length}`;
-      mask.append(svg('path', { d: `M${point(angle - spread, tangent)} L${point(angle - spread, 2000)} L${point(angle + spread, 2000)} L${point(angle + spread, tangent)} Z`, fill: 'black' }));
-    }
-    layer.append(mask);
-    const visible = svg('g', { mask: `url(#${maskId})` });
-    const shape = group.cloneNode(true);
-    if (captureTarget) {
-      const clipId = `capture-${prefix}-${p.id}-${excludeId}`;
-      const clip = svg('clipPath', { id: clipId, clipPathUnits: 'userSpaceOnUse' });
-      const targetPos = view(captureTarget);
-      clip.append(svg('circle', { cx: targetPos.x, cy: targetPos.y, r: 2 * RADIUS * UNIT }));
-      layer.append(clip);
-      const area = svg('g', { 'clip-path': `url(#${clipId})` });
-      if (captureHints) { shape.setAttribute('fill', '#c28631'); shape.setAttribute('stroke', '#b77b27'); }
-      area.append(shape); visible.append(area);
-    } else visible.append(shape);
-    layer.append(visible);
-  };
-  maskedShape(null, 'empty');
-  for (const target of position.pieces) {
-    if (target.side === p.side || target.type === 'K' || !captureDestination(position, p, target)) continue;
-    maskedShape(target.id, `enemy-${target.id}`, target);
+  const branches = movementBranches(position, p);
+  drawVectorRange(unionPaths(branches.flatMap(branch => branch.paths)), layer, color, 41);
+  if (captureHints) for (const branch of branches) {
+    if (branch.target) drawVectorRange(branch.paths, layer, '#c28631', 38);
   }
 }
 
@@ -241,7 +194,7 @@ function renderDropZones() {
       if (flipped) { point.x = SIZE - point.x; point.y = SIZE - point.y; }
       if (!check(point).ok) continue;
       const index = (y * resolution + x) * 4;
-      pixels.data[index] = 50; pixels.data[index + 1] = 130; pixels.data[index + 2] = 85; pixels.data[index + 3] = 36;
+      pixels.data[index] = 66; pixels.data[index + 1] = 110; pixels.data[index + 2] = 170; pixels.data[index + 3] = 24;
     }
     context.putImageData(pixels, 0, 0);
     return canvas.toDataURL();
@@ -277,7 +230,18 @@ function renderRange() {
   }
   const selectedLayer = $('range-layer'); selectedLayer.replaceChildren();
   const p = currentPiece();
-  if (p) drawRange(p, selectedLayer);
+  if (p) drawRange(p, selectedLayer, '#426eaa');
+}
+
+function drawVectorRange(paths, layer, color, opacity) {
+  if (!paths.length) return;
+  layer.append(svg('path', { d: pathsToSvg(paths), fill: color, 'fill-opacity': opacity / 255,
+    'fill-rule': 'evenodd', stroke: color, 'stroke-width': 1.5, 'stroke-opacity': 0.5,
+    'stroke-linejoin': 'round', transform: flipped ? 'rotate(180 450 450)' : '', 'pointer-events': 'none' }));
+}
+
+function drawCaptureReach(position, piece, layer) {
+  drawVectorRange(captureReach(position, piece).paths, layer, '#568f5b', 43);
 }
 
 function renderGhost() {
@@ -298,7 +262,7 @@ function renderGhost() {
       ? { id: state.nextId, type: selected.drop, side: state.turn, ...ghost, promoted: false }
       : { ...p, ...ghost, promoted: p.promoted || result.mustPromote };
     const placed = { ...state, pieces: [...state.pieces.filter(piece => piece.id !== candidate.id && piece.id !== result.captured?.id), candidate] };
-    drawRange(candidate, previewLayer, '#426eaa', 'candidate', false, placed);
+    drawCaptureReach(placed, candidate, previewLayer);
     const threats = previewThreats(placed, candidate, threatVisibility);
     endangered = threats.endangered;
     for (const id of threats.targets) {

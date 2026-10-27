@@ -53,3 +53,7 @@ Direct Uploadの場合は、ビルド後の `dist/` をアップロードしま�
 - `scripts/`：ローカルサーバーとビルド
 - `tests/`：自動テスト
 - `docs/SPEC.md`：実装ルールと制限
+
+## 図形計算
+
+範囲表示には、同梱の[clipper-lib 6.4.2](https://github.com/junmer/clipper-lib)を使用しています。外部CDNへの接続や追加インストールは不要です。ライセンスは[public/vendor/LICENSE.txt](public/vendor/LICENSE.txt)を参照してください。

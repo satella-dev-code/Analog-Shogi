@@ -61,6 +61,7 @@
       <div class="board-frame">
         <svg id="board" viewBox="0 0 900 900" role="group" tabindex="0" aria-label="将棋盤。駒を選んで移動先を指定。矢印キーで移動先を調整、Enterで確定。">
           <defs>
+            <clipPath id="board-surface-clip"><rect width="900" height="900"/></clipPath>
             <clipPath id="board-clip"><rect x="22.5" y="22.5" width="855" height="855"/></clipPath>
             <linearGradient id="board-wood" x2="1" y2="1"><stop stop-color="#f1dfbd"/><stop offset=".48" stop-color="#ead4ac"/><stop offset="1" stop-color="#dfc497"/></linearGradient>
           </defs>
@@ -68,7 +69,7 @@
           <rect x="5" y="5" width="890" height="890" rx="2" fill="none" stroke="#fff5df" stroke-opacity=".7" stroke-width="2"/>
           <rect x="10" y="10" width="880" height="880" rx="1" fill="none" stroke="#9b7845" stroke-opacity=".38" stroke-width="1"/>
           <path d="M0 300 H900 M0 600 H900" stroke="#8e734e" stroke-width="1" stroke-dasharray="3 12" opacity="0.35"/>
-          <g id="last-move-layer"></g><g id="all-ranges-layer" clip-path="url(#board-clip)"></g><g id="drop-zones-layer" clip-path="url(#board-clip)" pointer-events="none"></g><g id="range-layer" clip-path="url(#board-clip)"></g><g id="drop-preview-layer" clip-path="url(#board-clip)" pointer-events="none"></g><g id="piece-layer"></g><g id="ghost-layer" pointer-events="none"></g>
+          <g id="last-move-layer"></g><g id="all-ranges-layer" clip-path="url(#board-clip)"></g><g id="drop-zones-layer" clip-path="url(#board-clip)" pointer-events="none"></g><g id="range-layer" clip-path="url(#board-clip)"></g><g id="drop-preview-layer" clip-path="url(#board-surface-clip)" pointer-events="none"></g><g id="piece-layer"></g><g id="ghost-layer" pointer-events="none"></g>
         </svg>
       </div>
       <div class="hand-tray" id="sente-tray">
@@ -84,11 +85,28 @@
   <dialog id="confirm-dialog" aria-labelledby="confirm-title"><h2 id="confirm-title"></h2><p id="confirm-description"></p><div class="dialog-actions"><button id="confirm-no" class="secondary-button">キャンセル</button><button id="confirm-yes" class="primary-button">確定</button></div></dialog>
   <dialog id="rules-dialog" aria-labelledby="rules-title">
     <div class="dialog-heading"><h2 id="rules-title">ルール</h2><button class="text-button" id="rules-close" aria-label="ルールを閉じる">閉じる</button></div>
-    <p>2人で交互に操作します。駒を選び、移動先をクリックするかドラッグしてください。移動範囲の色は目安です。選択中の駒の黄土色の領域は駒取りできる範囲です。ほかの駒や王手によって動けない場所もあります。</p>
-    <p>「自分の範囲」は手番側を青、「相手の範囲」は反対側を橙で表示します。両方同時に表示できます。範囲は経路と駒の重なりを反映した目安で、自玉の王手は移動先で判定します。取られそうな駒は、自分が青、相手が橙の縁です。「自分の危険」「相手の危険」でそれぞれ表示を切り替えられます。王手の表示は常に残ります。</p>
+    <p>2人で交互に操作します。駒を選び、移動先をクリックするかドラッグしてください。</p>
+    <h3>色の見方</h3>
+    <h4 class="color-guide-heading">色付きエリア</h4>
+    <dl class="color-guide">
+      <dt><span class="color-swatch guide-blue" aria-hidden="true"></span>青い範囲</dt><dd>今置ける場所。全駒表示では自分の移動範囲。</dd>
+      <dt><span class="color-swatch guide-green" aria-hidden="true"></span>薄緑の範囲</dt><dd>置いた後、自分の駒の当たり判定が届く範囲。</dd>
+      <dt><span class="color-swatch guide-orange" aria-hidden="true"></span>橙の範囲</dt><dd>「相手の範囲」で表示する相手の移動範囲。</dd>
+      <dt><span class="color-swatch guide-ochre" aria-hidden="true"></span>黄土色の範囲</dt><dd>今、敵駒を取れる位置の目安。</dd>
+    </dl>
+    <h4 class="color-guide-heading">駒の色</h4>
+    <dl class="color-guide">
+      <dt><span class="color-swatch guide-both" aria-hidden="true"></span>青・橙の駒</dt><dd>今取られる可能性がある駒。青は自分、橙は相手。</dd>
+      <dt><span class="color-swatch guide-purple" aria-hidden="true"></span>紫の駒</dt><dd>その位置に置くと取られる危険がある駒。</dd>
+      <dt><span class="color-swatch guide-green" aria-hidden="true"></span>緑の敵駒</dt><dd>置いた後、持っている駒から取れる敵駒。</dd>
+      <dt><span class="color-swatch guide-red" aria-hidden="true"></span>赤い駒</dt><dd>王なら王手。持っている駒なら置けない位置。</dd>
+    </dl>
+    <p>「自分」は現在の手番側です。「範囲」「危険」で表示を切り替えられます。王手は常に表示します。</p>
+    <p>駒の周りの円は当たり判定です。薄い駒は移動元か、今取る予定の駒。文字だけが赤い駒は成駒です。</p>
+    <p>範囲は目安です。王手や重なりで置けない場所もあります。王の移動範囲は合法な場所だけを表示します。</p>
     <h3>移動</h3>
     <dl class="rules-list">
-      <dt>王</dt><dd>全方向に距離2.0以内。</dd>
+      <dt>王</dt><dd>全方向に距離2.0以内。王手になる位置を除いた、合法な移動先だけを表示します。</dd>
       <dt>歩</dt><dd>前方2.0、幅1.2の長方形。横だけ・後ろへの移動は不可。</dd>
       <dt>金・銀</dt><dd>通常将棋の移動方向に左右22.5度の扇形。金は距離2.0、銀は2.2以内。</dd>
       <dt>飛・角・香</dt><dd>通常の射線を中心とする幅1.2の帯。距離は自由。香は前方のみ。</dd>
@@ -102,7 +120,7 @@
     <p>王に重なる位置へ相手が動ける状態が王手です。自分の王を王手にさらす手は禁止。詰みの自動判定はないため、投了で決着します。二歩・打ち歩詰めは禁止していません。千日手・持将棋の判定はありません。</p>
     <h3>操作・保存</h3>
     <p>TabとEnterで駒を選択。盤上で矢印キーで移動先を調整し、Enterで確定します。刻みは0.1、Shiftで0.5、Altで0.01。Escで解除。</p>
-    <p>持ち駒を選ぶと薄緑で打てる場所を表示します。持ち駒・盤上の駒ともに、候補位置に持っている駒を表示します。候補位置の青い範囲は、置いた後の移動範囲の目安です。置いた駒が取られる可能性がある場合は紫色の縁で、そこから取れる敵駒は橙で強調します。王手になる敵の王は赤で表示します。「危険」の自分・相手ボタンでそれぞれ切り替えられます。任意の成りを選ぶ前は、不成の動きで表示します。</p>
+    <p>任意の成りを選ぶ前は、不成の動きで予測します。</p>
     <p>対局はこのブラウザに自動保存します。待ったは最大100操作まで戻せます。</p>
   </dialog>
 </body>
