@@ -68,10 +68,27 @@ export function chooseCpuMove(state, random = Math.random) {
   }
   shortlist.sort((a, b) => b.score - a.score);
   if (!shortlist.length) return null;
+  // Look one reply ahead for the strongest immediate capture, including attacks
+  // on pieces other than the one just moved. Limit the search for phone speed.
+  const finalists = shortlist.slice(0, 10);
+  for (const c of finalists) {
+    const placed = { ...state, pieces: [...state.pieces.filter(p => p.id !== c.moved.id && p.id !== c.captured?.id), c.moved] };
+    const defenders = placed.pieces.filter(p => p.side === side && p.type !== 'K').sort((a, b) => value(b) - value(a));
+    let loss = 0, threatenedId = null;
+    for (const target of defenders) {
+      if (placed.pieces.some(attacker => attacker.side !== side && captureDestination(placed, attacker, target, true))) {
+        loss = value(target); threatenedId = target.id;
+        break;
+      }
+    }
+    // The moved piece's danger was already scored in the first pass.
+    if (loss && threatenedId !== c.moved.id) c.score -= loss * 10;
+  }
+  finalists.sort((a, b) => b.score - a.score);
   // Sample only near the best evaluated move. A 40-point window is far below
   // the 1,200-point reward for a pawn capture; large tactical losses stay out.
-  const bestScore = shortlist[0].score;
-  const pool = shortlist.filter(c => c.score >= bestScore - 40);
+  const bestScore = finalists[0].score;
+  const pool = finalists.filter(c => c.score >= bestScore - 40);
   const weights = pool.map(c => Math.exp((c.score - bestScore) / 12));
   let draw = random() * weights.reduce((sum, weight) => sum + weight, 0);
   let best = pool.at(-1);
