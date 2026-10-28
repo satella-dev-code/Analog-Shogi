@@ -4,7 +4,7 @@ const value = p => VALUE[p.type] + (p.promoted ? (['P','L','N','S'].includes(p.t
 
 // Candidate search is approximate; every returned move is validated by the same
 // continuous rules as human moves. A missed candidate never declares checkmate.
-export function chooseCpuMove(state) {
+export function chooseCpuMove(state, random = Math.random) {
   if (state.winner) return null;
   const side = state.turn, enemies = state.pieces.filter(p => p.side !== side), candidates = [];
   for (const piece of state.pieces) {
@@ -43,7 +43,10 @@ export function chooseCpuMove(state) {
     }
   }
   // Evaluate a small, diverse shortlist to keep the worker responsive on phones.
-  candidates.sort((a, b) => b.score - a.score);
+  // Vary which nearly tied positions reach the shortlist, without changing
+  // their tactical score. Injecting the RNG keeps regression tests repeatable.
+  for (const c of candidates) c.priority = c.score + (random() - .5) * 12;
+  candidates.sort((a, b) => b.priority - a.priority);
   const counts = new Map(), shortlist = [];
   for (const c of candidates) {
     const key = c.kind === 'drop' ? c.type : c.id, count = counts.get(key) || 0;
@@ -60,8 +63,18 @@ export function chooseCpuMove(state) {
     if (target.length) c.score += Math.max(...target.map(value)) * .3;
   }
   shortlist.sort((a, b) => b.score - a.score);
-  const best = shortlist[0];
-  if (!best) return null;
+  if (!shortlist.length) return null;
+  // Sample only near the best evaluated move. A 40-point window is far below
+  // the 1,200-point reward for a pawn capture; large tactical losses stay out.
+  const bestScore = shortlist[0].score;
+  const pool = shortlist.filter(c => c.score >= bestScore - 40);
+  const weights = pool.map(c => Math.exp((c.score - bestScore) / 12));
+  let draw = random() * weights.reduce((sum, weight) => sum + weight, 0);
+  let best = pool.at(-1);
+  for (let i = 0; i < pool.length; i++) {
+    draw -= weights[i];
+    if (draw < 0) { best = pool[i]; break; }
+  }
   return best.kind === 'drop' ? { kind: 'drop', type: best.type, to: best.to } : { kind: 'move', id: best.id, to: best.to, promote: best.promote };
 }
 export function applyCpuMove(state, action) {
