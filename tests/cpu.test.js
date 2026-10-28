@@ -32,8 +32,8 @@ test('no result or malformed action does not declare a winner',()=>{
 test('CPU can select and commit a piece from its hand',()=>{
  const state=position([p(1,'K',10,11),p(2,'K',10,1,'gote')]);
  state.hands.sente.G=1;
- const action=chooseCpuMove(state, () => 0),result=applyCpuMove(state,action);
- assert.equal(action.kind,'drop');assert.ok(result.ok);assert.equal(result.state.hands.sente.G,0);
+ const result=applyCpuMove(state,{kind:'drop',type:'G',to:{x:6,y:6}});
+ assert.ok(result.ok);assert.equal(result.state.hands.sente.G,0);
  assert.equal(result.state.pieces.at(-1).type,'G');
 });
 
@@ -63,4 +63,11 @@ test('a fixed random stream reproduces a move and clear captures stay preferred'
     assert.ok(result.ok); assert.equal(result.state.hands.sente.R,1);
     assert.equal(result.state.pieces.find(p=>p.id===3).promoted,true);
   }
+});
+
+test('CPU moves a stranded promoted piece toward the enemy king rather than staying at the edge', () => {
+ const state=position([p(1,'K',10,11),p(2,'K',6,5,'gote'),{...p(3,'R',6,0.5),promoted:true}]);
+ const action=chooseCpuMove(state,()=>0), result=applyCpuMove(state,action);
+ assert.ok(result.ok);
+ if(action.id===3) assert.ok(Math.hypot(action.to.x-6,action.to.y-5)<4.5);
 });

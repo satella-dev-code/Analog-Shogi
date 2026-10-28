@@ -7,6 +7,9 @@ const value = p => VALUE[p.type] + (p.promoted ? (['P','L','N','S'].includes(p.t
 export function chooseCpuMove(state, random = Math.random) {
   if (state.winner) return null;
   const side = state.turn, enemies = state.pieces.filter(p => p.side !== side), candidates = [];
+  const enemyKing = enemies.find(p => p.type === 'K');
+  const kingDistance = p => enemyKing ? Math.hypot(p.x - enemyKing.x, p.y - enemyKing.y) : 0;
+  const edgePenalty = p => Math.max(0, 1.5 - Math.min(p.x, p.y, SIZE - p.x, SIZE - p.y)) * 50;
   for (const piece of state.pieces) {
     if (piece.side !== side) continue;
     const points = [], seen = new Set();
@@ -30,7 +33,8 @@ export function chooseCpuMove(state, random = Math.random) {
       const center = 6 - Math.abs(to.x - 6);
       const repeat = state.lastMove?.to && Math.hypot(to.x - state.lastMove.to.x, to.y - state.lastMove.to.y) < .05;
       const score = (result.captured ? value(result.captured) * 12 : 0) + (promote ? 180 : 0)
-        + advance * (piece.type === 'K' ? -3 : 12) + center * 3 - (repeat ? 20 : 0);
+        + Math.max(-2, Math.min(2, advance)) * (piece.type === 'K' ? -3 : 4) + center * 3
+        + (piece.type === 'K' ? 0 : (kingDistance(piece) - kingDistance(to)) * 38 - edgePenalty(to)) - (repeat ? 20 : 0);
       candidates.push({ kind: 'move', id: piece.id, to, promote, score, moved: { ...piece, ...to, promoted: piece.promoted || promote }, captured: result.captured });
     }
   }
@@ -38,7 +42,7 @@ export function chooseCpuMove(state, random = Math.random) {
     const check = createDropValidator(state, type);
     for (let y = .6; y < SIZE - RADIUS; y += .8) for (let x = .6; x < SIZE - RADIUS; x += .8) {
       const to = { x, y }; if (!check(to).ok) continue;
-      const score = 15 + (6 - Math.abs(x - 6)) * 3 + (side === 'sente' ? 12 - y : y) * 3;
+      const score = 15 + (6 - Math.abs(x - 6)) * 3 + (SIZE - kingDistance(to)) * 20 - edgePenalty(to);
       candidates.push({ kind: 'drop', type, to, score, moved: { id: state.nextId, type, side, ...to, promoted: false } });
     }
   }
@@ -58,7 +62,7 @@ export function chooseCpuMove(state, random = Math.random) {
     const placed = { ...state, pieces: [...state.pieces.filter(p => p.id !== c.moved.id && p.id !== c.captured?.id), c.moved] };
     const endangered = enemies.some(p => p.id !== c.captured?.id && captureDestination(placed, p, c.moved, true));
     if (endangered) c.score -= value(c.moved) * 13;
-    if (isInCheck(placed, other(side))) c.score += 120;
+    if (isInCheck(placed, other(side))) c.score += 500;
     const target = enemies.filter(p => p.id !== c.captured?.id && p.type !== 'K' && captureDestination(placed, c.moved, p, true));
     if (target.length) c.score += Math.max(...target.map(value)) * .3;
   }
