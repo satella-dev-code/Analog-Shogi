@@ -49,7 +49,7 @@
         <span class="control-label">危険</span>
         <div class="segmented-controls"><button id="own-threats" class="text-button" aria-label="先手の危険" aria-pressed="true">先手</button><button id="opponent-threats" class="text-button" aria-label="後手の危険" aria-pressed="true">後手</button></div>
       </div>
-      <div class="mode-row"><label for="game-mode">対戦モード</label><select id="game-mode"><option value="local">2人対戦</option><option value="cpu">CPU対戦（自分は先手）</option></select></div>
+      <div class="mode-row"><label for="game-mode">対戦モード</label><select id="game-mode"><option value="local">2人対戦</option><option value="cpu">CPU対戦（自分は先手）</option><option value="cpu-vs-cpu">CPU vs CPU</option></select></div>
     </div>
     <div class="game-actions" aria-label="対局操作">
       <div class="game-status" aria-live="polite">
@@ -60,6 +60,7 @@
       </div>
 
       <button id="undo" class="text-button" disabled>待った</button>
+      <button id="cpu-pause" class="text-button" aria-pressed="false" hidden>一時停止</button>
       <button id="flip" class="text-button" aria-label="盤の上下を反転">盤の反転</button>
       <span class="action-spacer"></span>
       <button id="resign" class="text-button">投了</button>
@@ -153,6 +154,7 @@
     <p>二歩：自分の不成の歩の上下には歩を打てません。既存の歩の中心から左右0.3以内の帯が、盤の上下端まで続きます。打つ歩の中心で判定し、帯の端も禁止です。成った歩や相手の歩は対象外。通常の歩の移動には適用しません。</p>
     <h3>勝敗</h3>
     <p>王に重なる位置へ相手が動ける状態が王手です。自分の王を王手にさらす手は禁止。詰みの自動判定はないため、投了で決着します。打ち歩詰めは禁止していません。千日手・持将棋の判定はありません。</p>
+    <p>「CPU vs CPU」では両者が自動で指します。一時停止・再開ができ、待ったをすると一手戻して停止します。棋譜の再生中は自動対戦を止めます。</p>
     <h3>操作・保存</h3>
     <p>スマホでは、駒をドラッグすると指から離れた隅に移動先を拡大表示します。</p>
     <p>TabとEnterで駒を選択。盤上で矢印キーで移動先を調整し、Enterで確定します。刻みは0.1、Shiftで0.5、Altで0.01。Escで解除。</p>

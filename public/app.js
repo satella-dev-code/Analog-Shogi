@@ -1,3 +1,4 @@
+import { normalizeGameMode, isCpuTurn, cpuMoveDelay } from './game-mode.js';
 import { applyCpuMove } from './cpu.js';
 import { loupeGeometry } from './touch-loupe.js';
 import { createRecord, appendRecord, recordFromHistory, readRecord, decodeRecord, samePosition, MAX_RECORD_BYTES } from './records.js';
@@ -31,6 +32,7 @@ let pending = null;
 let confirmAction = null;
 let saveAvailable = true;
 let gameMode = 'local';
+let cpuPaused = false;
 let cpuWorker = null;
 let cpuTimer = null;
 let cpuDeadline = null;
@@ -54,7 +56,8 @@ try {
   const saved = JSON.parse(localStorage.getItem(STORAGE));
   if (saved?.version === 2 && validSaved(saved.state)) {
     state = saved.state;
-    gameMode = saved.gameMode === 'cpu' ? 'cpu' : 'local';
+    gameMode = normalizeGameMode(saved.gameMode);
+    cpuPaused = gameMode === 'cpu-vs-cpu' && saved.cpuPaused === true;
     history = Array.isArray(saved.history) ? saved.history.filter(validSaved).slice(-100) : [];
     flipped = false;
     try {
@@ -67,7 +70,7 @@ try {
 
 function save() {
   if (replay) return;
-  try { localStorage.setItem(STORAGE, JSON.stringify({ version: 2, state, history, flipped, record: gameRecord, gameMode })); saveAvailable = true; }
+  try { localStorage.setItem(STORAGE, JSON.stringify({ version: 2, state, history, flipped, record: gameRecord, gameMode, cpuPaused })); saveAvailable = true; }
   catch { saveAvailable = false; }
   $('save-note').hidden = saveAvailable;
   $('save-note').textContent = saveAvailable ? '' : t('自動保存できません。');
@@ -345,13 +348,18 @@ function render() {
   $('check-banner').textContent = localized(`王手 · ${sideName(state.turn)}`, `Check · ${sideName(state.turn)}`);
   board.classList.toggle('in-check', inCheck);
   $('undo').disabled = !!replay || history.length === 0;
+  $('resign').hidden = gameMode === 'cpu-vs-cpu';
   $('resign').disabled = !!replay || cpuTurn() || !!state.winner;
   $('reset').disabled = !!replay;
   renderRecord();
   $('game-mode').value = gameMode;
   $('game-mode').disabled = !!replay;
-  $('cpu-status').hidden = !cpuTurn() || !!replay || !!state.winner;
+  $('cpu-status').hidden = !cpuTurn() || !!replay || !!state.winner || gameMode === 'cpu-vs-cpu';
   $('cpu-status').textContent = t('CPUが考えています…');
+  $('cpu-pause').hidden = gameMode !== 'cpu-vs-cpu';
+  $('cpu-pause').disabled = !!replay || !!state.winner;
+  $('cpu-pause').textContent = t(cpuPaused ? '再開' : '一時停止');
+  $('cpu-pause').setAttribute('aria-pressed', String(cpuPaused));
   scheduleCpu();
 }
 
@@ -464,6 +472,7 @@ $('flip').addEventListener('click', () => { flipped = !flipped; ghost = null; sa
 $('undo').addEventListener('click', () => {
   if (replay || !history.length) return;
   cancelCpu();
+  if (gameMode === 'cpu-vs-cpu') cpuPaused = true;
   do {
     gameRecord = { ...gameRecord, steps: gameRecord.steps.slice(0, -1) };
     state = history.pop();
@@ -480,6 +489,7 @@ $('confirm-no').addEventListener('click', () => { confirmAction = null; $('confi
 $('confirm-dialog').addEventListener('cancel', () => { confirmAction = null; setTimeout(scheduleCpu, 0); });
 $('confirm-yes').addEventListener('click', () => { const action = confirmAction; confirmAction = null; $('confirm-dialog').close(); action?.(); });
 $('reset').addEventListener('click', () => confirm(t('新しい対局を始めますか？'), t('現在の対局と棋譜を消して、初期配置に戻します。'), () => {
+  cpuPaused = false;
   state = initialState(); gameRecord = createRecord(state); history = []; selected = null; ghost = null;
   save(); render(); message('');
 }));
@@ -597,7 +607,7 @@ $('record-file').addEventListener('change', async event => {
   } catch (error) { message(error.message === '棋譜ファイルが大きすぎます。' ? error.message : '棋譜ファイルの形式が正しくありません。', true); }
 });
 
-function cpuTurn() { return gameMode === 'cpu' && state.turn === 'gote'; }
+function cpuTurn() { return isCpuTurn(gameMode, state.turn); }
 function cancelCpu() {
   cpuEpoch++; clearTimeout(cpuTimer); cpuTimer = null;
   clearTimeout(cpuDeadline); cpuDeadline = null;
@@ -608,15 +618,15 @@ function cpuUnavailable() {
   message('CPUが指せる手を見つけられませんでした。2人対戦に切り替えました。', true);
 }
 function scheduleCpu() {
-  if (!cpuTurn() || replay || state.winner || pending || document.querySelector('dialog[open]') || cpuWorker || cpuTimer) return;
+  if (!cpuTurn() || cpuPaused || replay || state.winner || pending || document.querySelector('dialog[open]') || cpuWorker || cpuTimer) return;
   const before = state, epoch = cpuEpoch;
   cpuTimer = setTimeout(() => {
     cpuTimer = null;
-    if (before !== state || epoch !== cpuEpoch || replay || !cpuTurn()) return;
+    if (before !== state || epoch !== cpuEpoch || cpuPaused || replay || !cpuTurn()) return;
     try {
       cpuWorker = new Worker(new URL('./cpu-worker.js', import.meta.url), { type: 'module' });
       cpuWorker.onmessage = ({ data }) => {
-        if (before !== state || epoch !== cpuEpoch || replay || !cpuTurn()) return;
+        if (before !== state || epoch !== cpuEpoch || cpuPaused || replay || !cpuTurn()) return;
         const result = applyCpuMove(state, data.action);
         cancelCpu();
         if (result.ok) commit(result); else cpuUnavailable();
@@ -625,11 +635,17 @@ function scheduleCpu() {
       cpuDeadline = setTimeout(cpuUnavailable, 15000);
       cpuWorker.postMessage({ ...state, log: [] });
     } catch { cpuUnavailable(); }
-  }, 250);
+  }, cpuMoveDelay(gameMode));
 }
 $('game-mode').addEventListener('change', event => {
-  cancelCpu(); gameMode = event.target.value === 'cpu' ? 'cpu' : 'local';
+  cancelCpu(); gameMode = normalizeGameMode(event.target.value); cpuPaused = false;
   selected = null; ghost = null; hideLoupe(); save(); render(); message('');
+});
+
+$('cpu-pause').addEventListener('click', () => {
+  if (gameMode !== 'cpu-vs-cpu' || replay || state.winner) return;
+  cancelCpu(); cpuPaused = !cpuPaused;
+  save(); render(); message('');
 });
 
 captureTranslations(document.body);

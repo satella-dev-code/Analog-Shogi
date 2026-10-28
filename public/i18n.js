@@ -1,4 +1,7 @@
 const translations = {
+  '再開': 'Resume', 'CPU対戦を一時停止中': 'CPU match paused',
+  '「CPU vs CPU」では両者が自動で指します。一時停止・再開ができ、待ったをすると一手戻して停止します。棋譜の再生中は自動対戦を止めます。': 'In CPU vs CPU, both sides play automatically. Pause or resume at any time. Undo goes back one move and pauses the match. Automatic play stops during replay.',
+
   "二歩です。自分の不成の歩の上下（左右0.3以内）には歩を打てません。": "Double pawn: cannot drop a pawn within 0.3 horizontally of your own unpromoted pawn, anywhere above or below it.",
   "通常将棋をもとにした独自ルールです。二歩は独自の帯で制限します。打ち歩詰めの制限や詰みの自動判定はなく、投了で終了します。": "This is a shogi variant with a custom double-pawn rule. Pawn-drop mate is allowed. Checkmate is not detected automatically; games end by resignation.",
   "二歩：自分の不成の歩の上下には歩を打てません。既存の歩の中心から左右0.3以内の帯が、盤の上下端まで続きます。打つ歩の中心で判定し、帯の端も禁止です。成った歩や相手の歩は対象外。通常の歩の移動には適用しません。": "Double pawn: you cannot drop a pawn in the vertical strip within 0.3 horizontally of an existing friendly unpromoted pawn. The strip spans the board, including its edges; the dropped pawn’s center determines legality. Promoted and enemy pawns do not count. Normal pawn moves are unaffected.",
