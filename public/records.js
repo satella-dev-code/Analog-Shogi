@@ -1,4 +1,4 @@
-import { SIZE, RADIUS, TYPES, other } from './engine.js';
+import { SIZE, RADIUS, TYPES, other, collisionMode } from './engine.js';
 
 export const RECORD_FORMAT = 'analog-shogi-record';
 export const MAX_RECORD_BYTES = 5 * 1024 * 1024;
@@ -6,9 +6,10 @@ const SIDES = ['sente', 'gote'], MAX_STEPS = 10000;
 const integer = (value, min = 0, max = 1e9) => Number.isSafeInteger(value) && value >= min && value <= max;
 const fail = () => { throw new Error('棋譜ファイルの形式が正しくありません。'); };
 function point(value) {
+  // Read-only replays also accept coordinates from the original 12-unit board.
   if (!value || !Number.isFinite(value.x) || !Number.isFinite(value.y)
-    || value.x < RADIUS - 1e-7 || value.x > SIZE - RADIUS + 1e-7
-    || value.y < RADIUS - 1e-7 || value.y > SIZE - RADIUS + 1e-7) fail();
+    || value.x < RADIUS - 1e-7 || value.x > 12 - RADIUS + 1e-7
+    || value.y < RADIUS - 1e-7 || value.y > 12 - RADIUS + 1e-7) fail();
   return { x: value.x, y: value.y };
 }
 function cleanPiece(value) {
@@ -34,7 +35,7 @@ function metadata(value) {
     if (!SIDES.includes(value.lastMove.side)) fail();
     lastMove = { from: value.lastMove.from == null ? null : point(value.lastMove.from), to: point(value.lastMove.to), side: value.lastMove.side };
   }
-  return { turn: value.turn, moveNumber: value.moveNumber, nextId: value.nextId, winner: value.winner ?? null, hands, lastMove };
+  return { collisionMode: collisionMode(value), turn: value.turn, moveNumber: value.moveNumber, nextId: value.nextId, winner: value.winner ?? null, hands, lastMove };
 }
 export function recordPosition(value) {
   if (!Array.isArray(value?.pieces) || value.pieces.length < 2 || value.pieces.length > 40) fail();
@@ -51,7 +52,7 @@ export function recordPosition(value) {
 export const samePosition = (a, b) => JSON.stringify(recordPosition(a)) === JSON.stringify(recordPosition(b));
 const samePiece = (a, b) => a && b && a.id === b.id && a.type === b.type && a.side === b.side && a.x === b.x && a.y === b.y && a.promoted === b.promoted;
 export function createRecord(state) {
-  return { format: RECORD_FORMAT, version: 1, rules: 'continuous-12-radius0.3', initial: recordPosition(state), steps: [] };
+  return { format: RECORD_FORMAT, version: 1, rules: `continuous-${SIZE}-radius0.3`, initial: recordPosition(state), steps: [] };
 }
 export function appendRecord(record, before, after) {
   const start = recordPosition(before), end = recordPosition(after);

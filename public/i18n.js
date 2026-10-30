@@ -1,4 +1,14 @@
 const translations = {
+  '飛車制限モード（実験）': 'Rook-block mode (experimental)',
+  '角拡張モード（旧実験）': 'Wide-bishop mode (legacy)',
+  '配置調整モード（旧実験）': 'Formation mode (legacy)',
+  '菱形モード（旧実験）': 'Diamond mode (legacy)',
+  '通過判定': 'Path collision',
+  'スタンダードモード': 'Standard mode',
+  'ワイルドモード': 'Wild mode',
+  '通過判定を変更しますか？': 'Change path collision?',
+  '判定を変更して、新しい対局を始めます。': 'Start a new game with the selected collision rule.',
+
   '再開': 'Resume', 'CPU対戦を一時停止中': 'CPU match paused',
   '「CPU vs CPU」では両者が自動で指します。一時停止・再開ができ、待ったをすると一手戻して停止します。棋譜の再生中は自動対戦を止めます。': 'In CPU vs CPU, both sides play automatically. Pause or resume at any time. Undo goes back one move and pauses the match. Automatic play stops during replay.',
 
@@ -7,7 +17,7 @@ const translations = {
   "二歩：自分の不成の歩の上下には歩を打てません。既存の歩の中心から左右0.3以内の帯が、盤の上下端まで続きます。打つ歩の中心で判定し、帯の端も禁止です。成った歩や相手の歩は対象外。通常の歩の移動には適用しません。": "Double pawn: you cannot drop a pawn in the vertical strip within 0.3 horizontally of an existing friendly unpromoted pawn. The strip spans the board, including its edges; the dropped pawn’s center determines legality. Promoted and enemy pawns do not count. Normal pawn moves are unaffected.",
   "王に重なる位置へ相手が動ける状態が王手です。自分の王を王手にさらす手は禁止。詰みの自動判定はないため、投了で決着します。打ち歩詰めは禁止していません。千日手・持将棋の判定はありません。": "Your king is in check if an opponent can move to overlap it. You cannot leave your king in check. Checkmate is not detected automatically; resign to end the game. Pawn-drop mate is allowed. Repetition and impasse are not detected.",
 
-  "手番の駒を操作します。駒を選び、移動先をクリックするかドラッグしてください。": "Move the side to play. Select a piece, then click a destination or drag it.",
+  "手番の駒を操作します。駒をタップして選び、移動先をタップします。ドラッグでも動かせます。": "Move the side to play. Tap a piece, then tap its destination. You can also drag it.",
   "対戦モード": "Game mode",
   "2人対戦": "Two players",
   "CPU対戦（自分は先手）": "CPU (you play Sente)",
@@ -79,7 +89,7 @@ const translations = {
   '通常の射線を中心とする幅1.2の帯。距離は自由。香は前方のみ。': 'Bands 1.2 units wide around the standard shogi lines, with unlimited distance. Lances move forward only.',
   '前に3.2、左右に1.6の2点から半径0.95以内。他の駒を飛び越えます。': 'Land within 0.95 of either point 3.2 forward and 1.6 to the left or right. Knights jump over pieces.',
   '歩・香・桂・銀は金の動き。馬・龍は元の動きに全方向・距離2.0以内を追加。': 'Promoted pawns, lances, knights and silvers move as golds. Promoted bishops and rooks add movement up to 2.0 in any direction.',
-  '移動先で敵1枚と重なれば取れ、指定した位置に止まります。味方や敵2枚との同時重なりは禁止です。持ち駒は空いた場所へ打てます。全駒共通で、移動の中心線が他の駒に当たらなければ進めます。桂だけは途中の駒を飛び越えられます。持ち駒を重ねて打って取ることはできません。盤の幅は12、駒の当たり判定の直径は0.6です。': 'Overlap exactly one enemy at the destination to capture it and stop at your chosen coordinates. Friendly overlaps and overlapping two enemies are prohibited. Drop pieces from your hand onto empty space; drops cannot capture. Every piece can move if its center line clears other pieces; knights can jump. The board is 12 units wide and piece collision circles are 0.6 in diameter.',
+  '移動先で敵1枚と重なれば取れ、指定した位置に止まります。味方や敵2枚との同時重なりは禁止です。持ち駒は空いた場所へ打てます。「スタンダードモード」は移動中の円同士の重なりも禁止します。「ワイルドモード」は中心線が他の駒の円に当たらなければ通れます。「飛車制限モード（実験）」は等間隔1.2の初期配置で、飛車・龍の経路は半径0.6、その他はワイルドと同じ半径0.3で遮ります。角の移動幅は1.2です。着地点と捕獲の円判定は全駒共通です。桂だけは途中の駒を飛び越えられます。持ち駒を重ねて打って取ることはできません。盤の幅は10.8、駒の当たり判定の直径は0.6です。': 'Overlap exactly one enemy at the destination to capture it and stop at your chosen coordinates. Friendly overlaps and overlapping two enemies are prohibited. Drop pieces from your hand onto empty space; drops cannot capture. Standard mode prevents overlapping circles during movement. Wild mode only requires the moving center line to clear other circles. Rook-block mode (experimental) keeps uniform 1.2 spacing: rooks and promoted rooks need 0.6 path clearance, while other pieces use 0.3 as in Wild mode. Bishop bands remain 1.2 wide. Circular landing and capture rules are shared by all pieces. Only knights can jump over pieces. The board is 10.8 units wide and piece collision circles are 0.6 in diameter.',
   '奥行き4の敵陣に移動前か移動後の中心が入ると成れます。次に動けなくなる歩・香・桂は強制成り。その位置への打ちは禁止です。': 'Promotion is optional when the starting or ending center is in the opponent’s 4-unit-deep zone. Pawns, lances and knights must promote if they would otherwise have no future move. Drops to such positions are prohibited.',
   '王に重なる位置へ相手が動ける状態が王手です。自分の王を王手にさらす手は禁止。詰みの自動判定はないため、投了で決着します。二歩・打ち歩詰めは禁止していません。千日手・持将棋の判定はありません。': 'Your king is in check if an opponent can move to overlap it. You cannot leave your king in check. Checkmate is not detected automatically; resign to end the game. Multiple pawns in a file and pawn-drop mate are allowed. Repetition and impasse are not detected.',
   'TabとEnterで駒を選択。盤上で矢印キーで移動先を調整し、Enterで確定します。刻みは0.1、Shiftで0.5、Altで0.01。Escで解除。': 'Use Tab and Enter to select a piece. On the board, adjust the destination with arrow keys and confirm with Enter. Steps: 0.1, Shift for 0.5, Alt for 0.01. Esc cancels.',

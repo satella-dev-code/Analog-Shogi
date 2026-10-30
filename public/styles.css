@@ -9,7 +9,18 @@
   --accent: #365f52;
   --serif: "Hiragino Mincho ProN", "Yu Mincho", serif;
 }
-* { box-sizing: border-box; }
+* {
+  box-sizing: border-box;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+input, textarea, [contenteditable="true"], [contenteditable="true"] * {
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
+}
 body { margin: 0; }
 button { font: inherit; cursor: pointer; -webkit-tap-highlight-color: transparent; }
 button:disabled { opacity: .3; cursor: default; }
@@ -261,6 +272,8 @@ html:fullscreen, html:-webkit-full-screen { background: #f7f7f5; overflow: auto;
 .hand-piece-face { width: 34px; height: 38px; overflow: visible; }
 .hand-piece-body { fill: #f4ead5; stroke: #7e694a; stroke-width: 1.6; stroke-linejoin: round; filter: drop-shadow(0 2.5px 0 #9b835d) drop-shadow(0 4px 2px #49391f22); }
 .hand-piece-text { font-family: var(--serif); font-size: 39px; font-weight: 700; fill: #242820; }
+.piece-icon { pointer-events: none; }
+#selected-piece-name { flex-shrink: 0; font-size: 12px; font-weight: 600; color: #66543b; }
 .hand-piece sup {
   position: absolute; right: -2px; bottom: 0; min-width: 16px; height: 16px;
   display: grid; place-items: center; margin: 0; padding: 0 3px;
@@ -321,19 +334,24 @@ html:fullscreen, html:-webkit-full-screen { background: #f7f7f5; overflow: auto;
 #history .record-move[aria-current] { background: #e8dccb; font-weight: 600; }
 
 /* Safari needs the prefixed rule on the SVG text itself as well as its parent. */
-#board, #board *, .hand-piece, .hand-piece * {
+.play-area, .play-area *, .touch-loupe, .touch-loupe * {
   -webkit-user-select: none;
   user-select: none;
   -webkit-touch-callout: none;
   -webkit-user-drag: none;
+  -webkit-tap-highlight-color: transparent;
 }
-.hand-piece { touch-action: manipulation; }
+.hand-piece-face, .hand-piece-face * { pointer-events: none; }
+.hand-piece { touch-action: none; }
 .touch-loupe { position: fixed; z-index: 20; pointer-events: none; overflow: hidden; border: 2px solid #faf6ed; border-radius: 14px; background: #f7f3eb; box-shadow: 0 0 0 1px #9c8566, 0 5px 18px #30261940; }
 .touch-loupe svg { display: block; width: 100%; height: 100%; overflow: hidden; }
 
 .mode-row { display: flex; align-items: center; margin-left: auto; flex: 0 1 180px; min-width: 0; font-size: 12px; color: var(--muted); }
 .mode-row label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-#game-mode { font: inherit; color: #514735; background: #faf8f3; border: 1px solid #d2c1a8; border-radius: 6px; padding: 6px 8px; min-height: 34px; width: 100%; min-width: 0; max-width: 100%; text-overflow: ellipsis; }
+#game-mode, #collision-mode { font: inherit; color: #514735; background: #faf8f3; border: 1px solid #d2c1a8; border-radius: 6px; padding: 6px 8px; min-height: 34px; width: 100%; min-width: 0; max-width: 100%; text-overflow: ellipsis; }
+.mode-settings { display: flex; gap: 6px; margin-left: auto; min-width: 0; flex: 1; justify-content: flex-end; }
+.mode-settings .mode-row { margin-left: 0; flex: 0 1 150px; }
+.mode-settings .collision-row { flex-basis: 138px; }
 #cpu-status { font-size: 11px; color: #786044; }
 
 .display-toolbar { gap: 14px; flex-wrap: nowrap; }
@@ -342,10 +360,16 @@ html:fullscreen, html:-webkit-full-screen { background: #f7f7f5; overflow: auto;
   .range-controls { gap: 4px; flex-shrink: 0; }
   .range-controls .text-button { padding: 4px 6px; gap: 4px; }
   .mode-row { flex-basis: 140px; }
-  #game-mode { padding: 5px 4px; font-size: 11px; }
+  #game-mode, #collision-mode { padding: 5px 4px; font-size: 11px; }
+  .display-toolbar { flex-wrap: wrap; }
+  .mode-settings { flex: 1 0 100%; }
+  .mode-settings .mode-row { flex: 1; }
 }
 @media (max-width: 380px) {
   .range-controls .text-button { padding: 5px 4px; font-size: 10px; }
   .range-controls .text-button::before { display: none; }
   .mode-row { flex-basis: 110px; }
 }
+
+.english-piece-note { display: none; }
+html[lang="en"] .english-piece-note { display: block; }

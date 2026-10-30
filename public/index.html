@@ -49,7 +49,7 @@
         <span class="control-label">危険</span>
         <div class="segmented-controls"><button id="own-threats" class="text-button" aria-label="先手の危険" aria-pressed="true">先手</button><button id="opponent-threats" class="text-button" aria-label="後手の危険" aria-pressed="true">後手</button></div>
       </div>
-      <div class="mode-row"><label for="game-mode">対戦モード</label><select id="game-mode"><option value="local">2人対戦</option><option value="cpu">CPU対戦（自分は先手）</option><option value="cpu-vs-cpu">CPU vs CPU</option></select></div>
+      <div class="mode-settings"><div class="mode-row collision-row"><label for="collision-mode">通過判定</label><select id="collision-mode" aria-label="通過判定"><option value="disk">スタンダードモード</option><option value="center">ワイルドモード</option><option value="rook-block">飛車制限モード（実験）</option><option value="wide-bishop" hidden>角拡張モード（旧実験）</option><option value="formation" hidden>配置調整モード（旧実験）</option><option value="diamond" hidden>菱形モード（旧実験）</option></select></div><div class="mode-row"><label for="game-mode">対戦モード</label><select id="game-mode"><option value="local">2人対戦</option><option value="cpu">CPU対戦（自分は先手）</option><option value="cpu-vs-cpu">CPU vs CPU</option></select></div></div>
     </div>
     <div class="game-actions" aria-label="対局操作">
       <div class="game-status" aria-live="polite">
@@ -68,7 +68,7 @@
     </div>
     <section class="play-area" aria-label="将棋盤と持ち駒">
       <div class="hand-tray" id="gote-tray">
-        <strong>後手</strong><div class="hand-pieces" id="gote-hand" aria-label="後手の持ち駒"></div>
+        <strong>後手</strong><div class="hand-pieces" id="gote-hand" aria-label="後手の持ち駒"></div><span id="selected-piece-name" aria-live="polite" hidden></span>
       </div>
       <div class="board-frame">
         <svg id="board" viewBox="0 0 900 900" role="group" tabindex="0" aria-label="将棋盤。駒を選んで移動先を指定。矢印キーで移動先を調整、Enterで確定。">
@@ -120,7 +120,7 @@
     <div class="dialog-heading"><h2 id="rules-title">ルール</h2><button class="text-button" id="rules-close" aria-label="ルールを閉じる">閉じる</button></div>
     <p>通常将棋をもとにした独自ルールです。二歩は独自の帯で制限します。打ち歩詰めの制限や詰みの自動判定はなく、投了で終了します。</p>
     <p>CPU対戦は自分が先手、CPUが後手です。対戦モードは途中でも切り替えられます。CPUが候補手を見つけられない場合も、詰みとは判定しません。</p>
-    <p>手番の駒を操作します。駒を選び、移動先をクリックするかドラッグしてください。</p>
+    <p>手番の駒を操作します。駒をタップして選び、移動先をタップします。ドラッグでも動かせます。</p>
     <h3>色の見方</h3>
     <h4 class="color-guide-heading">色付きエリア</h4>
     <dl class="color-guide">
@@ -149,7 +149,8 @@
       <dt>成駒</dt><dd>歩・香・桂・銀は金の動き。馬・龍は元の動きに全方向・距離2.0以内を追加。</dd>
     </dl>
     <h3>駒取り・成り</h3>
-    <p>移動先で敵1枚と重なれば取れ、指定した位置に止まります。味方や敵2枚との同時重なりは禁止です。持ち駒は空いた場所へ打てます。全駒共通で、移動の中心線が他の駒に当たらなければ進めます。桂だけは途中の駒を飛び越えられます。持ち駒を重ねて打って取ることはできません。盤の幅は12、駒の当たり判定の直径は0.6です。</p>
+    <p class="english-piece-note" lang="en">Tap a piece to see its name and movement range. A + marks promotion. The symbols identify pieces; their moves follow Analog Shogi rules.</p>
+    <p>移動先で敵1枚と重なれば取れ、指定した位置に止まります。味方や敵2枚との同時重なりは禁止です。持ち駒は空いた場所へ打てます。「スタンダードモード」は移動中の円同士の重なりも禁止します。「ワイルドモード」は中心線が他の駒の円に当たらなければ通れます。「飛車制限モード（実験）」は等間隔1.2の初期配置で、飛車・龍の経路は半径0.6、その他はワイルドと同じ半径0.3で遮ります。角の移動幅は1.2です。着地点と捕獲の円判定は全駒共通です。桂だけは途中の駒を飛び越えられます。持ち駒を重ねて打って取ることはできません。盤の幅は10.8、駒の当たり判定の直径は0.6です。</p>
     <p>奥行き4の敵陣に移動前か移動後の中心が入ると成れます。次に動けなくなる歩・香・桂は強制成り。その位置への打ちは禁止です。</p>
     <p>二歩：自分の不成の歩の上下には歩を打てません。既存の歩の中心から左右0.3以内の帯が、盤の上下端まで続きます。打つ歩の中心で判定し、帯の端も禁止です。成った歩や相手の歩は対象外。通常の歩の移動には適用しません。</p>
     <h3>勝敗</h3>

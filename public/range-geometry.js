@@ -1,5 +1,5 @@
 import C from './vendor/clipper.js';
-import { SIZE, RADIUS, MOVE_RANGE, BAND_HALF_WIDTH, PAWN_HALF_WIDTH, KNIGHT, SECTOR_HALF_ANGLE, forward, isJump, isInCheck } from './engine.js';
+import { SIZE, RADIUS, PATH_CLEARANCE, collisionMode, pathClearance, MOVE_RANGE, BAND_HALF_WIDTH, bishopHalfWidth, PAWN_HALF_WIDTH, KNIGHT, SECTOR_HALF_ANGLE, forward, isJump, isInCheck } from './engine.js';
 
 // World coordinates are kept to a millionth. Curves are flattened directly from
 // their equations to a maximum sagitta of 0.001 world units (<0.1 SVG pixels).
@@ -59,8 +59,9 @@ export function bounds(paths) {
 const touches = (a, b) => a && b && a.left <= b.right && b.left <= a.right && a.top <= b.bottom && b.top <= a.bottom;
 
 const shapes = new WeakMap();
-export function movementShape(piece) {
-  const signature = `${piece.type}:${piece.x}:${piece.y}:${piece.side}:${piece.promoted}`;
+export function movementShape(piece, position = {}) {
+  const width = piece.type === 'B' ? bishopHalfWidth(position) : BAND_HALF_WIDTH;
+  const signature = `${width}:${piece.type}:${piece.x}:${piece.y}:${piece.side}:${piece.promoted}`;
   const cached = shapes.get(piece);
   if (cached?.signature === signature) return cached.paths;
   const type = piece.promoted && ['P', 'L', 'N', 'S'].includes(piece.type) ? 'G' : piece.type;
@@ -68,7 +69,7 @@ export function movementShape(piece) {
   const disk = r => paths.push(circlePath(piece.x, piece.y, r));
   const band = angle => {
     const a = angle * Math.PI / 180;
-    paths.push(polygon([[-BAND_HALF_WIDTH, -far], [BAND_HALF_WIDTH, -far], [BAND_HALF_WIDTH, far], [-BAND_HALF_WIDTH, far]].map(([x, y]) => ({ x: piece.x + x * Math.cos(a) - y * Math.sin(a), y: piece.y + x * Math.sin(a) + y * Math.cos(a) }))));
+    paths.push(polygon([[-width, -far], [width, -far], [width, far], [-width, far]].map(([x, y]) => ({ x: piece.x + x * Math.cos(a) - y * Math.sin(a), y: piece.y + x * Math.sin(a) + y * Math.cos(a) }))));
   };
   const sector = degrees => {
     const radius = MOVE_RANGE[type], sweep = 2 * SECTOR_HALF_ANGLE * Math.PI / 180;
@@ -92,11 +93,32 @@ export function movementShape(piece) {
   shapes.set(piece, { signature, paths: result });
   return result;
 }
-function obstacleMask(piece, obstacle) {
+function convexHull(points) {
+  const sorted = points.slice().sort((a, b) => a.x - b.x || a.y - b.y);
+  const cross = (a, b, c) => (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+  const half = sequence => {
+    const result = [];
+    for (const point of sequence) {
+      while (result.length > 1 && cross(result.at(-2), result.at(-1), point) <= 0) result.pop();
+      result.push(point);
+    }
+    result.pop(); return result;
+  };
+  return [...half(sorted), ...half(sorted.slice().reverse())];
+}
+function obstacleMask(piece, obstacle, clearance, mode) {
   const paths = [circlePath(obstacle.x, obstacle.y, 2 * RADIUS)];
   const dx = obstacle.x - piece.x, dy = obstacle.y - piece.y, distance = Math.hypot(dx, dy);
-  if (!isJump(piece) && distance > RADIUS) {
-    const angle = Math.atan2(dy, dx), spread = Math.asin(RADIUS / distance), tangent = Math.sqrt(distance * distance - RADIUS * RADIUS);
+  if (!isJump(piece) && mode === 'diamond') {
+    const vertices = [[PATH_CLEARANCE, 0], [0, PATH_CLEARANCE], [-PATH_CLEARANCE, 0], [0, -PATH_CLEARANCE]]
+      .map(([x, y]) => ({ x: obstacle.x + x, y: obstacle.y + y }));
+    const projected = vertices.map(v => {
+      const dx = v.x - piece.x, dy = v.y - piece.y, length = Math.hypot(dx, dy);
+      return length > 1e-9 ? { x: v.x + dx / length * far, y: v.y + dy / length * far } : v;
+    });
+    paths.push(polygon(convexHull([...vertices, ...projected])));
+  } else if (!isJump(piece) && distance >= clearance - 1e-7) {
+    const angle = Math.atan2(dy, dx), spread = Math.asin(Math.min(1, clearance / distance)), tangent = Math.sqrt(Math.max(0, distance * distance - clearance * clearance));
     const point = (a, length) => ({ x: piece.x + Math.cos(a) * length, y: piece.y + Math.sin(a) * length });
     paths.push(polygon([point(angle - spread, tangent), point(angle - spread, far), point(angle + spread, far), point(angle + spread, tangent)]));
   }
@@ -106,9 +128,9 @@ function obstacleMask(piece, obstacle) {
 // Each branch fixes which (if any) enemy is removed. Its path is ignored only
 // for that capture; every other piece remains a landing/path obstacle.
 export function movementBranches(position, piece, captures = true) {
-  const shape = movementShape(piece), obstacles = position.pieces.filter(p => p.id !== piece.id);
+  const shape = movementShape(piece, position), obstacles = position.pieces.filter(p => p.id !== piece.id);
   if (!shape.length) return [];
-  const masks = obstacles.map(p => { const paths = obstacleMask(piece, p); return { id: p.id, paths, bounds: bounds(paths) }; });
+  const masks = obstacles.map(p => { const paths = obstacleMask(piece, p, pathClearance(position, piece), collisionMode(position)); return { id: p.id, paths, bounds: bounds(paths) }; });
   const clipped = (area, excluded) => {
     const box = bounds(area);
     if (!box) return [];
@@ -132,12 +154,12 @@ export function geometricMoves(position, piece) {
 // Attacks on a king use no other captures. With the king removed from the fixed
 // board, a king center is attacked iff it lies within 2R of an attack endpoint.
 const attackCache = new Map();
-function attackedArea(pieces, defendingSide) {
-  const key = defendingSide + ':' + pieces.map(p => `${p.id},${p.type},${p.side},${p.x},${p.y},${p.promoted}`).join(';');
+function attackedArea(pieces, defendingSide, collisionMode) {
+  const key = collisionMode + ':' + defendingSide + ':' + pieces.map(p => `${p.id},${p.type},${p.side},${p.x},${p.y},${p.promoted}`).join(';');
   if (attackCache.has(key)) return attackCache.get(key);
   const paths = [];
   for (const attacker of pieces) if (attacker.side !== defendingSide) {
-    const moves = movementBranches({ pieces }, attacker, false)[0]?.paths || [];
+    const moves = movementBranches({ pieces, collisionMode }, attacker, false)[0]?.paths || [];
     paths.push(...offsetPaths(moves, 2 * RADIUS));
   }
   const result = unionPaths(paths);
@@ -151,7 +173,7 @@ export function kingMoves(position, king) {
   for (const branch of movementBranches(position, king)) {
     if (!branch.paths.length) continue;
     const fixed = position.pieces.filter(p => p.id !== king.id && p.id !== branch.target?.id);
-    safe.push(...subtractPaths(branch.paths, attackedArea(fixed, king.side)));
+    safe.push(...subtractPaths(branch.paths, attackedArea(fixed, king.side, position.collisionMode)));
   }
   return unionPaths(safe);
 }
@@ -165,12 +187,12 @@ export function legalMovementBranches(position, piece) {
   if (piece.type === 'K') return [{ target: null, paths: kingMoves(position, piece) }];
   return movementBranches(position, piece).map(branch => {
     const fixed = position.pieces.filter(p => p.id !== piece.id && p.id !== branch.target?.id);
-    if (!branch.paths.length || !isInCheck({ pieces: fixed }, piece.side)) return branch;
+    if (!branch.paths.length || !isInCheck({ collisionMode: position.collisionMode, pieces: fixed }, piece.side)) return branch;
     const box = bounds(branch.paths), step = .04, safe = [];
     const left = Math.max(RADIUS, Math.floor(box.left / S / step) * step);
     const top = Math.max(RADIUS, Math.floor(box.top / S / step) * step);
     const right = Math.min(SIZE - RADIUS, box.right / S), bottom = Math.min(SIZE - RADIUS, box.bottom / S);
-    const clear = (x, y) => !isInCheck({ pieces: [...fixed, { ...piece, x, y }] }, piece.side);
+    const clear = (x, y) => !isInCheck({ collisionMode: position.collisionMode, pieces: [...fixed, { ...piece, x, y }] }, piece.side);
     for (let y = top; y < bottom; y += step) {
       let start = null;
       const endY = Math.min(y + step, bottom);

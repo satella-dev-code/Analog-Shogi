@@ -1,4 +1,5 @@
 import { normalizeGameMode, isCpuTurn, cpuMoveDelay } from './game-mode.js';
+import { PIECE_SYMBOLS, PROMOTION_MARK } from './piece-symbols.js';
 import { applyCpuMove } from './cpu.js';
 import { loupeGeometry } from './touch-loupe.js';
 import { createRecord, appendRecord, recordFromHistory, readRecord, decodeRecord, samePosition, MAX_RECORD_BYTES } from './records.js';
@@ -8,15 +9,18 @@ import { captureReach } from './capture-reach.js';
 import { previewThreats } from './preview-threats.js';
 import { createRenderCache, createFrameScheduler } from './render-cache.js';
 import { t, sideName, pieceName, historyText, getLanguage, setLanguage, captureTranslations, applyLanguage } from './i18n.js';
-import { SIZE, RADIUS, TYPES, NAMES, label, clone, initialState, other, isInCheck, threatenedPieceIds, validateMove, movePiece, createDropValidator, validateDrop, dropPiece } from './engine.js';
+import { SIZE, RADIUS, TYPES, NAMES, collisionMode, label, clone, initialState, other, isInCheck, threatenedPieceIds, validateMove, movePiece, createDropValidator, validateDrop, dropPiece } from './engine.js';
 
 const $ = id => document.getElementById(id);
 const localized = (ja, en) => getLanguage() === 'en' ? en : ja;
 const board = $('board');
+const playArea = document.querySelector('.play-area');
 const NS = 'http://www.w3.org/2000/svg';
-const STORAGE = 'ma-continuous-shogi-v2';
-const UNIT = 900 / SIZE;
-const PIECE_SCALE = UNIT / 100;
+const STORAGE = 'ma-continuous-shogi-10.8-v2';
+let UNIT = 900 / SIZE;
+let PIECE_SCALE = UNIT / 100;
+const legacyReplay = () => !!replay && replay.record.rules !== `continuous-${SIZE}-radius0.3`;
+const displayedSize = () => legacyReplay() ? 12 : SIZE;
 let state = initialState();
 let history = [];
 let gameRecord = createRecord(state);
@@ -42,7 +46,7 @@ const threatVisibility = { own: true, opponent: true };
 const cachedRender = createRenderCache();
 let displayedAllRanges = null;
 const cached = (key, compute) => cachedRender(state, flipped, key, compute);
-const checked = side => cached(`check:${side}`, () => isInCheck(state, side));
+const checked = side => !legacyReplay() && cached(`check:${side}`, () => isInCheck(state, side));
 const ghostFrames = createFrameScheduler(renderGhost, requestAnimationFrame, cancelAnimationFrame);
 
 
@@ -82,7 +86,7 @@ function svg(tag, attrs = {}, text) {
   if (text !== undefined) node.textContent = text;
   return node;
 }
-function view(p) { return { x: (flipped ? SIZE - p.x : p.x) * UNIT, y: (flipped ? SIZE - p.y : p.y) * UNIT }; }
+function view(p) { return { x: (flipped ? displayedSize() - p.x : p.x) * UNIT, y: (flipped ? displayedSize() - p.y : p.y) * UNIT }; }
 function logical(event) {
   const rect = board.getBoundingClientRect();
   const x = (event.clientX - rect.left) / rect.width * SIZE;
@@ -113,18 +117,20 @@ function renderHands() {
       if (!count) continue;
       const button = document.createElement('button');
       button.className = 'hand-piece';
+      button.dataset.pieceType = type;
       button.classList.toggle('selected', active && selected?.drop === type);
       button.disabled = !active;
       button.setAttribute('aria-label', localized(`${sideName(side)}の持ち駒 ${NAMES[type]} ${count}枚`, `${sideName(side)} hand: ${pieceName(NAMES[type])}, ${count}`));
       button.setAttribute('aria-pressed', active && selected?.drop === type ? 'true' : 'false');
       const face = svg('svg', { viewBox: '-36 -40 72 80', class: 'hand-piece-face', 'aria-hidden': 'true' });
       face.append(svg('path', { d: 'M0 -36 L23 -23 L29 31 L-29 31 L-23 -23 Z', class: 'hand-piece-body' }));
-      face.append(svg('text', { 'text-anchor': 'middle', y: 15, class: 'hand-piece-text' }, NAMES[type]));
+      appendPieceSymbol(face, { type, promoted: false }, true);
       button.append(face);
       const amount = document.createElement('sup');
       amount.textContent = count;
       button.append(amount);
-      button.addEventListener('click', () => {
+      button.addEventListener('click', event => {
+        if (event.detail > 0 || event.pointerType) return;
         selected = { drop: type }; ghost = null;
         render();
         message('');
@@ -139,8 +145,19 @@ function renderHands() {
   document.querySelector('.play-area').classList.toggle('is-flipped', flipped);
 }
 
+function appendPieceSymbol(parent, piece, hand = false) {
+  if (getLanguage() !== 'en') {
+    parent.append(svg('text', { class: hand ? 'hand-piece-text' : 'piece-text', 'text-anchor': 'middle', y: 15 }, label(piece)));
+    return;
+  }
+  const symbol = svg('g', { class: `${hand ? 'hand-piece-text' : 'piece-text'} piece-icon`, 'aria-hidden': 'true' });
+  symbol.append(svg('path', { d: PIECE_SYMBOLS[piece.type], 'fill-rule': 'evenodd', transform: piece.promoted ? 'translate(-2 3) scale(.82)' : '' }));
+  if (piece.promoted) symbol.append(svg('path', { d: PROMOTION_MARK, class: 'promotion-mark' }));
+  parent.append(symbol);
+}
+
 function renderPieces() {
-  const threatened = cached('threats', () => threatenedPieceIds(state));
+  const threatened = legacyReplay() ? new Set() : cached('threats', () => threatenedPieceIds(state));
   for (const [key, side] of [['own', 'sente'], ['opponent', 'gote']]) {
     const button = $(key === 'own' ? 'own-threats' : 'opponent-threats');
     button.setAttribute('aria-pressed', String(threatVisibility[key]));
@@ -160,7 +177,8 @@ function renderPieces() {
     const rotation = (p.side === 'gote') !== flipped ? 180 : 0;
     const shape = svg('g', { transform: `rotate(${rotation}) scale(${PIECE_SCALE})`, 'pointer-events': 'none' });
     shape.append(svg('path', { d: 'M0 -36 L23 -23 L29 31 L-29 31 L-23 -23 Z', class: 'piece-body' }));
-    shape.append(svg('text', { class: 'piece-text', 'text-anchor': 'middle', y: 15 }, label(p)));
+    appendPieceSymbol(shape, p);
+    group.append(svg('title', {}, pieceName(label(p))));
     group.append(shape);
     group.addEventListener('keydown', event => {
       if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); selectPiece(p); board.focus({ preventScroll: true }); }
@@ -228,6 +246,10 @@ function renderDropZones() {
 function renderRange() {
   renderDropZones();
   const all = $('all-ranges-layer');
+  if (legacyReplay()) {
+    all.replaceChildren(); $('range-layer').replaceChildren(); displayedAllRanges = null;
+    return;
+  }
   const sides = [
     ['own', 'sente', '#426eaa'],
     ['opponent', 'gote', '#b9653b'],
@@ -309,7 +331,7 @@ function renderGhost() {
   const rotation = (candidate.side === 'gote') !== flipped ? 180 : 0;
   const held = svg('g', { class: `piece piece-preview ${result.ok ? 'valid' : 'invalid'}${endangered ? ' preview-endangered' : ''}${candidate.promoted ? ' promoted' : ''}`, transform: `translate(${v.x} ${v.y}) rotate(${rotation}) scale(${PIECE_SCALE})`, 'pointer-events': 'none', 'aria-hidden': 'true' });
   held.append(svg('path', { d: 'M0 -36 L23 -23 L29 31 L-29 31 L-23 -23 Z', class: 'piece-body' }));
-  held.append(svg('text', { class: 'piece-text', 'text-anchor': 'middle', y: 15 }, label(candidate)));
+  appendPieceSymbol(held, candidate);
   layer.append(held);
   renderLoupe();
 }
@@ -339,7 +361,14 @@ function renderLoupe() {
 function hideLoupe() { touchPoint = null; renderLoupe(); }
 
 function render() {
+  UNIT = 900 / displayedSize(); PIECE_SCALE = UNIT / 100;
+  const inset = RADIUS * UNIT;
+  const clip = document.querySelector('#board-clip rect');
+  for (const [key, value] of Object.entries({ x: inset, y: inset, width: 900 - 2 * inset, height: 900 - 2 * inset })) clip.setAttribute(key, value);
   renderHands(); renderLastMove(); renderRange(); renderPieces(); renderGhost();
+  const selectedPiece = currentPiece() || (selected?.drop ? { type: selected.drop, promoted: false } : null);
+  $('selected-piece-name').hidden = getLanguage() !== 'en' || !selectedPiece;
+  $('selected-piece-name').textContent = selectedPiece ? pieceName(label(selectedPiece)) : '';
   board.classList.toggle('has-selection', !!selected);
   $('turn-title').textContent = state.winner ? localized(`${sideName(state.winner)}の勝ち`, `${sideName(state.winner)} wins`) : localized(`${sideName(state.turn)}の番`, `${sideName(state.turn)} to move`);
   $('move-number').textContent = localized(`${state.moveNumber}手目`, `Move ${state.moveNumber}`);
@@ -352,6 +381,8 @@ function render() {
   $('resign').disabled = !!replay || cpuTurn() || !!state.winner;
   $('reset').disabled = !!replay;
   renderRecord();
+  $('collision-mode').value = collisionMode(state);
+  $('collision-mode').disabled = !!replay;
   $('game-mode').value = gameMode;
   $('game-mode').disabled = !!replay;
   $('cpu-status').hidden = !cpuTurn() || !!replay || !!state.winner || gameMode === 'cpu-vs-cpu';
@@ -394,30 +425,53 @@ function attempt(raw) {
 }
 
 board.addEventListener('pointerdown', event => {
-  if (replay || cpuTurn() || event.button !== 0 || event.isPrimary === false || pending || state.winner || pointer) return;
   if (event.cancelable) event.preventDefault();
+  if (replay || cpuTurn() || event.button !== 0 || event.isPrimary === false || pending || state.winner || pointer) return;
   touchPoint = null;
   const point = logical(event), hit = atPoint(point);
-  pointer = { id: event.pointerId, x: event.clientX, y: event.clientY, own: !selected?.drop && hit?.side === state.turn, cancelOnClick: !!hit && hit.id === selected?.id };
+  pointer = { id: event.pointerId, x: event.clientX, y: event.clientY,
+    dragThreshold: event.pointerType === 'touch' ? 12 : 5, dragged: false,
+    own: !selected?.drop && hit?.side === state.turn, cancelOnClick: !!hit && hit.id === selected?.id };
   if (pointer.own) selectPiece(hit);
   board.setPointerCapture(event.pointerId);
   board.focus({ preventScroll: true });
 });
-board.addEventListener('pointermove', event => {
+playArea.addEventListener('pointerdown', event => {
+  const button = event.target.closest('.hand-piece');
+  if (!button || button.disabled || replay || cpuTurn() || pending || state.winner || pointer || event.button !== 0 || event.isPrimary === false) return;
+  const type = button.dataset.pieceType;
+  if (!type) return;
+  event.preventDefault();
+  pointer = { id: event.pointerId, x: event.clientX, y: event.clientY,
+    dragThreshold: event.pointerType === 'touch' ? 12 : 5, dragged: false,
+    own: true, fromHand: true, cancelOnClick: false };
+  // Capture on a stable container: selecting a hand piece rebuilds its button.
+  playArea.setPointerCapture(event.pointerId);
+  selected = { drop: type }; ghost = null; touchPoint = null;
+  render(); message(''); board.focus({ preventScroll: true });
+});
+playArea.addEventListener('pointermove', event => {
   if (!selected || pending || event.isPrimary === false) return;
+  if (!pointer && !event.composedPath().includes(board)) return;
+  if (pointer?.id === event.pointerId) {
+    pointer.dragged ||= Math.hypot(event.clientX - pointer.x, event.clientY - pointer.y) > pointer.dragThreshold;
+  }
   if (event.pointerType === 'touch') {
     if (!pointer || pointer.id !== event.pointerId) return;
+    // Small finger motion during a tap must not turn selection into a move.
+    if (!pointer.dragged) return;
     if (Math.min(innerWidth, innerHeight) <= 700) touchPoint = { x: event.clientX, y: event.clientY };
   } else hideLoupe();
   ghost = destination(logical(event)); ghostFrames.schedule();
 });
-board.addEventListener('pointerup', event => {
+playArea.addEventListener('pointerup', event => {
   if (!pointer || pointer.id !== event.pointerId) return;
   if (event.cancelable) event.preventDefault();
   hideLoupe();
-  const moved = Math.hypot(event.clientX - pointer.x, event.clientY - pointer.y) > 5;
+  const moved = pointer.dragged || Math.hypot(event.clientX - pointer.x, event.clientY - pointer.y) > pointer.dragThreshold;
   const { own, cancelOnClick } = pointer; pointer = null;
   if (board.hasPointerCapture(event.pointerId)) board.releasePointerCapture(event.pointerId);
+  if (playArea.hasPointerCapture(event.pointerId)) playArea.releasePointerCapture(event.pointerId);
   if (own && !moved) {
     if (cancelOnClick) { clearSelection(); message(''); }
     return;
@@ -431,9 +485,26 @@ board.addEventListener('pointerup', event => {
   }
   attempt(to);
 });
-board.addEventListener('pointercancel', () => { pointer = null; ghost = null; hideLoupe(); renderGhost(); });
-board.addEventListener('lostpointercapture', () => { if (pointer) { pointer = null; ghost = null; hideLoupe(); renderGhost(); } });
-for (const type of ['selectstart', 'contextmenu', 'dragstart']) board.addEventListener(type, event => event.preventDefault());
+function cancelPointerGesture() {
+  const fromHand = pointer?.fromHand;
+  pointer = null; ghost = null; hideLoupe();
+  if (fromHand) clearSelection(); else renderGhost();
+}
+playArea.addEventListener('pointercancel', cancelPointerGesture);
+playArea.addEventListener('lostpointercapture', () => { if (pointer) cancelPointerGesture(); });
+document.addEventListener('selectstart', event => {
+  if (!event.target.closest?.('input, textarea, [contenteditable="true"]')) event.preventDefault();
+});
+document.addEventListener('pointerdown', event => {
+  if (event.pointerType !== 'touch' || event.target.closest?.('input, textarea, [contenteditable="true"]')) return;
+  const selection = window.getSelection();
+  if (selection?.rangeCount) selection.removeAllRanges();
+}, { capture: true });
+for (const type of ['selectstart', 'contextmenu', 'dragstart']) playArea.addEventListener(type, event => event.preventDefault());
+// Older mobile Safari can begin native selection despite SVG pointer handling.
+board.addEventListener('touchstart', event => {
+  if (event.cancelable) event.preventDefault();
+}, { passive: false });
 window.addEventListener('resize', hideLoupe);
 window.addEventListener('scroll', hideLoupe, { passive: true });
 board.addEventListener('pointerleave', () => { if (!pointer) { ghost = null; renderGhost(); } });
@@ -490,7 +561,7 @@ $('confirm-dialog').addEventListener('cancel', () => { confirmAction = null; set
 $('confirm-yes').addEventListener('click', () => { const action = confirmAction; confirmAction = null; $('confirm-dialog').close(); action?.(); });
 $('reset').addEventListener('click', () => confirm(t('新しい対局を始めますか？'), t('現在の対局と棋譜を消して、初期配置に戻します。'), () => {
   cpuPaused = false;
-  state = initialState(); gameRecord = createRecord(state); history = []; selected = null; ghost = null;
+  state = initialState(collisionMode(state)); gameRecord = createRecord(state); history = []; selected = null; ghost = null;
   save(); render(); message('');
 }));
 $('resign').addEventListener('click', () => confirm(localized(`${sideName(state.turn)}が投了しますか？`, `Resign as ${sideName(state.turn)}?`), localized(`${sideName(other(state.turn))}の勝ちで、この対局を終了します。`, `${sideName(other(state.turn))} wins and the game ends.`), () => {
@@ -640,6 +711,20 @@ function scheduleCpu() {
 $('game-mode').addEventListener('change', event => {
   cancelCpu(); gameMode = normalizeGameMode(event.target.value); cpuPaused = false;
   selected = null; ghost = null; hideLoupe(); save(); render(); message('');
+});
+
+
+$('collision-mode').addEventListener('change', event => {
+  const mode = event.target.value;
+  const apply = () => {
+    cancelCpu(); cpuPaused = false;
+    state = initialState(mode); history = []; gameRecord = createRecord(state);
+    selected = null; ghost = null; hideLoupe(); save(); render(); message('');
+  };
+  $('collision-mode').value = collisionMode(state);
+  if (history.length || state.moveNumber > 1 || state.winner) {
+    confirm(t('通過判定を変更しますか？'), t('判定を変更して、新しい対局を始めます。'), apply);
+  } else apply();
 });
 
 $('cpu-pause').addEventListener('click', () => {

@@ -4,7 +4,7 @@ import { initialState, movePiece, dropPiece, other } from '../public/engine.js';
 import { createRecord, appendRecord, recordFromHistory, decodeRecord, readRecord, samePosition } from '../public/records.js';
 const p = (id, type, x, y, side = 'sente', promoted = false) => ({ id, type, x, y, side, promoted });
 function fixture() {
-  return { pieces: [p(1, 'K', 10, 11), p(2, 'K', 10, 1, 'gote'), p(3, 'P', 3, 4.5), p(4, 'S', 3.1, 3, 'gote', true)], hands: { sente: {}, gote: {} }, turn: 'sente', nextId: 5, moveNumber: 1, lastMove: null, winner: null, log: [] };
+  return { pieces: [p(1, 'K', 10, 10.2), p(2, 'K', 10, 1, 'gote'), p(3, 'P', 3, 4.5), p(4, 'S', 3.1, 3, 'gote', true)], hands: { sente: {}, gote: {} }, turn: 'sente', nextId: 5, moveNumber: 1, lastMove: null, winner: null, log: [] };
 }
 function sequence() {
   const states = [fixture()];
@@ -40,10 +40,21 @@ test('record migration retains the earliest available position and undo can bran
 test('new and empty records do not mutate the live game', () => {
   const live = initialState(), original = structuredClone(live);
   const record = createRecord(live);
+  assert.equal(record.rules, 'continuous-10.8-radius0.3');
   const loaded = readRecord(record);
   loaded.frames[0].pieces[0].x = 4;
   assert.deepEqual(live, original);
   assert.deepEqual(record.initial.pieces[0], original.pieces[0]);
+});
+
+test('records retain either path collision mode across every replay frame', () => {
+  for (const mode of ['center', 'disk', 'diamond', 'formation', 'wide-bishop','rook-block']) {
+    const state = { ...fixture(), collisionMode: mode };
+    const result = movePiece(state, 3, { x: 3.1, y: 3.2 });
+    assert.ok(result.ok);
+    const loaded = readRecord(appendRecord(createRecord(state), state, result.state));
+    for (const frame of loaded.frames) assert.equal(frame.collisionMode, mode);
+  }
 });
 test('imports reject damaged files, nonfinite coordinates and broken transitions', () => {
   const record = recordFromHistory(sequence().slice(0, -1), sequence().at(-1));

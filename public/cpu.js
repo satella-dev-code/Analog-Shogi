@@ -26,7 +26,7 @@ export function chooseCpuMove(state, random = Math.random) {
     }
     for (let y = RADIUS; y <= SIZE - RADIUS; y += .6) for (let x = RADIUS; x <= SIZE - RADIUS; x += .6) add({ x, y });
     for (const to of points) {
-      if (!movementAllows(piece, to)) continue;
+      if (!movementAllows(piece, to, state)) continue;
       const result = validateMove(state, piece.id, to); if (!result.ok) continue;
       const promote = result.canPromote || result.mustPromote;
       const advance = (to.y - piece.y) * forward(side);
